@@ -1,0 +1,6 @@
+n,robust_power,robust_false_deployment,plugin_false_deployment
+100,0.012,0.0,0.828
+300,0.332,0.0,0.972
+1000,0.994,0.0,1.0
+3000,1.0,0.0,1.0
+10000,1.0,0.0,1.0
