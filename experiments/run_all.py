@@ -28,9 +28,13 @@ from mnar_rl import (  # noqa: E402
     contrast_interval_minimax_regret,
     binary_missing_success_bounds,
     binary_reward_confidence_bounds,
+    binary_reward_confidence_bounds_twosided,
+    binary_reward_interval_width,
     binary_reward_mean_bounds,
     cancellation_gain,
     clopper_pearson_lower,
+    contrastive_ambiguity_width,
+    contrastive_missingness_budget,
     epsilon_soft,
     missing_probability_from_odds_ratio,
     optimal_policy,
@@ -874,6 +878,222 @@ def run_gamma_misspecification(
     save_figure(fig, "gamma_misspecification")
     return frame
 
+
+def run_ambiguity_geometry(gamma: float = 3.0) -> pd.DataFrame:
+    """Verify the exact cellwise width formula and its worst-case envelope."""
+    rows: list[dict[str, float]] = []
+    p_grid = np.linspace(0.001, 0.999, 401)
+    for q in (0.2, 0.5, 0.8):
+        widths = binary_reward_interval_width(q, p_grid, gamma)
+        envelope = (1.0 - q) * (gamma - 1.0) / (gamma + 1.0)
+        for p, width in zip(p_grid, widths, strict=True):
+            rows.append(
+                {
+                    "q": q,
+                    "p": float(p),
+                    "exact_width": float(width),
+                    "envelope": float(envelope),
+                }
+            )
+    frame = pd.DataFrame(rows)
+    frame.to_csv(ROOT / "results" / "ambiguity_geometry.csv", index=False)
+
+    fig, ax = plt.subplots(figsize=(5.4, 3.4))
+    for q in (0.2, 0.5, 0.8):
+        subset = frame[frame.q == q]
+        ax.plot(subset.p, subset.exact_width, label=rf"$q={q:g}$")
+        ax.axhline(
+            float(subset.envelope.iloc[0]),
+            linewidth=0.8,
+            linestyle=":",
+        )
+    ax.set_xlabel(r"Observed-case success probability $p$")
+    ax.set_ylabel("Sharp reward interval width")
+    ax.set_title(rf"MNAR ambiguity geometry at $\Gamma={gamma:g}$")
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.25)
+    save_figure(fig, "ambiguity_geometry")
+    return frame
+
+
+def run_randomization_necessity(gamma: float = 3.0) -> pd.DataFrame:
+    """A one-step instance where only a randomized nonbaseline policy is safe."""
+    transition = np.ones((1, 1, 3, 1))
+    mdp = TabularMDP(transition, np.array([1.0]))
+    q = np.array([[[9.0 / 25.0, 4.0 / 25.0, 477.0 / 800.0]]])
+    p = np.array([[[1.0 / 6.0, 5.0 / 8.0, 5.0 / 9.0]]])
+    lower, upper = binary_reward_mean_bounds(q, p, gamma)
+    baseline = np.array([[[1.0 / 5.0, 7.0 / 20.0, 9.0 / 20.0]]])
+    baseline_occupancy = policy_occupancy(mdp, baseline)
+    result = optimize_robust_improvement(mdp, baseline, lower, upper)
+
+    policies: list[tuple[str, np.ndarray]] = [("baseline", baseline)]
+    for action in range(3):
+        policy = np.zeros_like(baseline)
+        policy[0, 0, action] = 1.0
+        policies.append((f"deterministic_{action}", policy))
+    policies.append(("lp_randomized", result.policy))
+
+    rows: list[dict[str, float | str]] = []
+    for name, policy in policies:
+        occupancy = policy_occupancy(mdp, policy)
+        rows.append(
+            {
+                "policy": name,
+                "action_0_probability": float(policy[0, 0, 0]),
+                "action_1_probability": float(policy[0, 0, 1]),
+                "action_2_probability": float(policy[0, 0, 2]),
+                "robust_improvement": sharp_improvement_lower_bound(
+                    occupancy,
+                    baseline_occupancy,
+                    lower,
+                    upper,
+                ),
+            }
+        )
+    frame = pd.DataFrame(rows)
+    frame.to_csv(ROOT / "results" / "randomization_necessity.csv", index=False)
+    return frame
+
+
+def run_identification_estimation_phase(
+    gamma: float = 2.0,
+    delta: float = 0.05,
+    replicates: int = 1000,
+) -> pd.DataFrame:
+    """Separate irreducible identification failure from finite-sample error.
+
+    The full-data reward means are fixed at 0.35 and 0.65 by making missing
+    rewards MAR. The analyst nevertheless allows Gamma=2. At low observation
+    rates the population robust margin is nonpositive, so no amount of data can
+    certify improvement; elsewhere finite-sample power approaches one.
+    """
+    q_grid = [0.10, 0.20, 0.30, 0.40, 0.60, 0.80, 1.00]
+    sample_sizes = [100, 300, 1000, 3000, 10000]
+    p = np.array([0.35, 0.65])
+    behavior = np.array([0.5, 0.5])
+    rows: list[dict[str, float | int]] = []
+
+    def vectorized_limits(
+        total: np.ndarray,
+        observed: np.ndarray,
+        success: np.ndarray,
+        tail_alpha: float,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        q_lower = np.where(
+            observed == 0,
+            0.0,
+            beta.ppf(tail_alpha, observed, total - observed + 1),
+        )
+        p_lower = np.where(
+            success == 0,
+            0.0,
+            beta.ppf(tail_alpha, success, observed - success + 1),
+        )
+        p_upper = np.where(
+            success == observed,
+            1.0,
+            beta.ppf(1.0 - tail_alpha, success + 1, observed - success),
+        )
+        lower, _ = binary_reward_mean_bounds(q_lower, p_lower, gamma)
+        _, upper = binary_reward_mean_bounds(q_lower, p_upper, gamma)
+        return lower, upper
+
+    for q_value in q_grid:
+        q = np.array([q_value, q_value])
+        lower, upper = binary_reward_mean_bounds(q, p, gamma)
+        population_margin = float(lower[1] - upper[0])
+        for n in sample_sizes:
+            rng = np.random.default_rng(
+                5_000_000 + int(1000 * q_value) * 100_000 + 17 * n
+            )
+            total = rng.multinomial(n, behavior, size=replicates)
+            observed = rng.binomial(total, q)
+            success = rng.binomial(observed, p)
+
+            one_lower, one_upper = vectorized_limits(
+                total,
+                observed,
+                success,
+                delta / 6.0,  # three one-sided statements for each of two cells
+            )
+            two_lower, two_upper = vectorized_limits(
+                total,
+                observed,
+                success,
+                delta / 8.0,  # two two-sided intervals over two cells
+            )
+            methods = {
+                "one_sided_exact": one_lower[:, 1] - one_upper[:, 0] > 0.0,
+                "two_sided_exact": two_lower[:, 1] - two_upper[:, 0] > 0.0,
+            }
+            for method, declarations in methods.items():
+                rate = float(declarations.mean())
+                rows.append(
+                    {
+                        "q": q_value,
+                        "n": n,
+                        "method": method,
+                        "deployment_power": rate,
+                        "power_se": binomial_standard_error(rate, replicates),
+                        "population_robust_margin": population_margin,
+                        "true_improvement": 0.30,
+                        "replicates": replicates,
+                    }
+                )
+
+    frame = pd.DataFrame(rows)
+    frame.to_csv(ROOT / "results" / "identification_estimation_phase.csv", index=False)
+    one_sided = frame[frame.method == "one_sided_exact"]
+    pivot = one_sided.pivot(index="q", columns="n", values="deployment_power")
+    pivot.to_csv(ROOT / "results" / "identification_estimation_phase_plot.csv")
+    line_frame = pivot.T.reset_index()
+    line_frame.columns = [
+        "n",
+        *[f"q_{str(value).replace('.', '_')}" for value in pivot.index],
+    ]
+    line_frame.to_csv(
+        ROOT / "results" / "identification_estimation_lines.csv",
+        index=False,
+    )
+    efficiency = (
+        frame[frame.q == 0.60]
+        .pivot(index="n", columns="method", values="deployment_power")
+        .reset_index()
+        .rename_axis(None, axis=1)
+    )
+    efficiency.to_csv(
+        ROOT / "results" / "interval_efficiency_plot.csv",
+        index=False,
+    )
+
+    fig, ax = plt.subplots(figsize=(6.0, 3.6))
+    image = ax.imshow(
+        pivot.to_numpy(),
+        vmin=0.0,
+        vmax=1.0,
+        aspect="auto",
+        origin="lower",
+    )
+    ax.set_xticks(np.arange(len(pivot.columns)), [str(value) for value in pivot.columns])
+    ax.set_yticks(np.arange(len(pivot.index)), [f"{value:g}" for value in pivot.index])
+    ax.set_xlabel("Logged rounds")
+    ax.set_ylabel("Reward observation rate $q$")
+    ax.set_title("Identification versus estimation phase diagram")
+    for row in range(pivot.shape[0]):
+        for column in range(pivot.shape[1]):
+            ax.text(
+                column,
+                row,
+                f"{pivot.iloc[row, column]:.2f}",
+                ha="center",
+                va="center",
+                fontsize=7,
+            )
+    fig.colorbar(image, ax=ax, label="Certification probability")
+    save_figure(fig, "identification_estimation_phase")
+    return frame
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--random-mdps", type=int, default=200)
@@ -888,9 +1108,12 @@ def main() -> None:
     sensitivity = run_sensitivity_curve()
     cancellation = run_cancellation_curve()
     minimax = run_minimax_ambiguity()
+    ambiguity_geometry = run_ambiguity_geometry()
+    randomization = run_randomization_necessity()
     finite_sample = run_finite_sample(replicates=args.replicates)
     post_selection = run_post_selection(replicates=args.post_selection_replicates)
     transition_frame = run_transition_uncertainty(replicates=args.replicates)
+    phase_frame = run_identification_estimation_phase(replicates=args.replicates)
     random_frame = run_random_mdps(n_instances=args.random_mdps)
     baseline_frame = run_baseline_quality(n_instances=min(args.random_mdps, 100))
     gamma_frame = run_gamma_misspecification(n_instances=args.gamma_mdps, workers=args.workers)
@@ -903,6 +1126,9 @@ def main() -> None:
         "direct_cancellation_certificate": float(cancellation.direct_contrastive_bound.iloc[0]),
         "separate_cancellation_certificate_at_low_observation": float(cancellation.separate_value_bound.iloc[0]),
         "symmetric_ambiguity_randomized_regret_at_width_0.8": float(minimax.randomized_minimax_regret.iloc[-1]),
+        "ambiguity_geometry_max_ratio": float((ambiguity_geometry.exact_width / ambiguity_geometry.envelope).max()),
+        "randomization_necessity": randomization.to_dict(orient="records"),
+        "identification_estimation_phase": phase_frame.to_dict(orient="records"),
         "finite_sample_replicates": args.replicates,
         "post_selection_replicates": args.post_selection_replicates,
         "post_selection_false_rate_k100": {

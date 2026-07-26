@@ -77,17 +77,23 @@ We answer through partial identification and sensitivity analysis \citep{manski2
 Our contributions are fourfold. First, we prove nonidentification without restrictions and derive sharp binary reward intervals, with a finite-support LP extension. Second, we characterize sharp fixed-policy values and sharp improvement over a baseline. Direct comparison cancels common uncertainty; the exact gain over subtracting separate value bounds is occupancy overlap times interval width. Third, we give an exact occupancy-measure LP and characterize the infinite-data ambiguity--regret tradeoff, establishing when abstention is information-theoretically unavoidable. Fourth, one-sided exact confidence limits produce a single reward set valid for every data-dependent policy, yielding post-selection-safe improvement, a finite-sample rate, and an estimated-transition extension. All validations use exact tabular planning and require no GPU.
 
 \section{Related Work}
-\paragraph{Missing rewards and partial supervision.}
-Offline RL with unlabeled transitions has been studied under reward-label scarcity \citep{yu2022unlabeled}, while MAHALO combines offline RL with observation-only data \citep{li2023mahalo}. Missing-outcome bandits study online learning when the probability of observing an outcome may depend on its value \citep{mahrooghi2025missing}; monitored MDPs make reward observability part of online control \citep{kazemipour2025monitored}. Partial identification has also been used in offline dynamic pricing under demand ambiguity \citep{bian2024pricing}. Most closely, \citet{wei2026mnar} point-identify MNAR policy values using future-state shadow variables. We instead permit nonidentification and optimize a policy directly over the sharp sensitivity set induced by a fixed offline log.
+\paragraph{Incomplete reward supervision.}
+Several offline-RL settings relax fully labeled transition data, but make different assumptions about why labels are absent. Unlabeled-transition methods assign or infer rewards for auxiliary data \citep{yu2022unlabeled}; MAHALO jointly reasons over reward-labeled, action-labeled, and observation-only trajectories \citep{li2023mahalo}; and semi-supervised offline RL imputes missing actions in otherwise rewarded trajectories \citep{zheng2023semi}. These methods target label scarcity or heterogeneous modalities rather than selection on the unobserved reward. Missing-outcome bandits explicitly allow outcome-dependent observation but optimize online regret \citep{mahrooghi2025missing}. Recommendation OPE has also modeled MNAR feedback through separately estimated logging and observation propensities \citep{takahashi2025mnar}. Most closely, \citet{wei2026mnar} use future states as shadow variables and bridge functions to point-identify finite-horizon policy values. We address the complementary regime in which those exclusion and completeness conditions are not asserted: values remain partially identified, and the goal is to optimize and certify a policy over the entire compatible set.
 
-\paragraph{Sensitivity and robust policy learning.}
-Sensitivity analysis and partial identification quantify conclusions under unverifiable selection assumptions \citep{rosenbaum2002observational,manski2003partial}. Robust policy learning under hidden action confounding has been studied in contextual and sequential settings \citep{kallus2018confounding,kallus2020confounding,jin2025policy,hess2026sharp}. Here actions and transitions are observed; the reward itself is selectively missing. This structure yields cellwise sharp sets and a baseline-relative occupancy program.
+\paragraph{Off-policy evaluation and identification.}
+Classical OPE controls sampling error using importance weighting, value models, or doubly robust combinations \citep{jiang2016doubly}. Bridge-function approaches identify policy values in confounded partially observed systems when suitable proxy conditions hold \citep{shi2022confounded}. Such estimators quantify uncertainty around a point-identified target. Our interval has a different interpretation: even after the observed-data distribution is known exactly, multiple full-data reward laws may remain compatible. This distinction between \emph{estimation uncertainty} and \emph{identification ambiguity} drives both our lower bound and our abstention rule.
 
-\paragraph{Safe and robust RL.}
-High-confidence policy improvement and SPIBB protect a baseline against finite-sample or coverage error \citep{thomas2015high,laroche2019spibb}. Robust MDPs optimize over exogenously specified uncertainty sets \citep{iyengar2005robust,nilim2005robust,wiesemann2013robust}. Our ambiguity set is derived sharply from the MNAR observed law, and our direct objective exploits uncertainty shared by candidate and baseline rather than robustifying them separately.
+\paragraph{Pessimism and baseline-relative improvement.}
+Offline-RL pessimism controls extrapolation under partial coverage \citep{uehara2022pessimistic}. Relative-pessimism methods compare a learned policy directly with behavior, including ATAC's adversarial critic \citep{cheng2022atac} and supported trust-region improvement \citep{mao2023supported}. High-confidence policy improvement and SPIBB likewise protect a baseline against finite-sample or support error \citep{thomas2015high,laroche2019spibb}. We share the baseline-relative objective but study a logically distinct obstacle: rewards on behavior-supported transitions are themselves MNAR and may be nonidentified. Our cancellation identity shows exactly which part of this reward ambiguity disappears in a direct comparison.
 
-\paragraph{Decision under partial identification.}
-Minimax-regret treatment rules formalize decisions when observationally equivalent models recommend different actions, including the classical missing-outcome setting \citep{manski2007missing,manski2009diversified,stoye2012minimax}. Our ambiguity theorem specializes this logic to the sharp \emph{candidate--baseline improvement interval} generated by a sequential occupancy contrast. The new connection is operational: the same sharp interval determines an exact occupancy optimization problem, a safe-deployment rule, and the residual decision regret that remains even after infinite data.
+\paragraph{Robust rewards and robust MDPs.}
+Corruption-robust offline RL studies adversarial modification of a fraction of logged tuples \citep{zhang2022corruption}, while heavy-tail methods replace fragile reward estimators with robust statistics \citep{zhu2024heavy}. Neither addresses systematic selection in which the probability of seeing a reward depends on its latent value. Robust MDPs optimize over uncertainty sets for rewards or transitions \citep{iyengar2005robust,nilim2005robust,wiesemann2013robust}. Our optimization uses this machinery only after deriving a \emph{sharp, data-compatible} reward set; the contrastive LP is also less conservative than planning against the lower reward endpoint.
+
+\paragraph{Sensitivity analysis and partial identification.}
+Sensitivity analysis reports conclusions over bounded deviations from unverifiable selection assumptions \citep{rosenbaum2002observational,manski2003partial}. Robust policy learning under hidden action confounding has been developed in contextual and sequential settings \citep{kallus2018confounding,kallus2020confounding,jin2025policy,hess2026sharp}. Here treatment assignment is observed without hidden confounding; the missing object is the reward. That structure yields closed-form binary bounds and an exact occupancy formulation rather than generic distributional optimization.
+
+\paragraph{Decision under ambiguity.}
+Minimax-regret treatment rules formalize decisions when observationally equivalent models recommend different actions, including classical missing-outcome problems \citep{manski2007missing,manski2009diversified,stoye2012minimax}. We specialize this logic to the sharp \emph{candidate--baseline improvement interval} induced by a sequential occupancy contrast. The same interval determines a certifiable policy improvement, the optimal randomized decision between two policies, and the irreducible regret that remains with infinite data.
 
 \section{Setup and Sensitivity Model}
 Consider an episodic MDP with horizon $H$, finite state space $\cS$, finite action space $\cA$, initial distribution $\mu$, transition kernels $P_h$, and binary rewards $R_h\in\{0,1\}$. For the base presentation, $(R_h,M_h)$ is conditionally independent of $S_{h+1}$ given $(S_h,A_h)$. If rewards depend on the realized transition, one may instead define every reward cell as $x=(h,s,a,s')$ and replace its occupancy by $d_h^\pi(s,a)P_h(s'\mid s,a)$; all bounds and the occupancy LP remain linear and unchanged in form. A Markov policy $\pi$ has occupancy
@@ -162,6 +168,31 @@ w_x=(1-q_x)\{U_\Gamma(p_x)-L_\Gamma(p_x)\}. \label{eq:width}
 \end{equation}
 It grows with missingness and $\Gamma$ and persists at infinite sample size. At $q_x=1$ or $\Gamma=1$ it vanishes; at unobserved cells it becomes vacuous. Thus data quantity can shrink sampling uncertainty but cannot, by itself, shrink $w_x$.
 
+\begin{proposition}[Geometry of MNAR ambiguity]\label{prop:geometry}
+For a binary reward cell,
+\begin{equation}
+ w_\Gamma(q,p)=
+ (1-q)\frac{p(1-p)(\Gamma^2-1)}
+ {(1-p+\Gamma p)(p+\Gamma(1-p))}. \label{eq:closed-width}
+\end{equation}
+For fixed $(q,\Gamma)$, this width is symmetric about $p=1/2$, increases with $p(1-p)$, and is maximized at $p=1/2$. With
+$\kappa_\Gamma=(\Gamma-1)/(\Gamma+1)$,
+\begin{equation}
+ w_\Gamma(q,p)\leq (1-q)\kappa_\Gamma. \label{eq:cell-envelope}
+\end{equation}
+Consequently, for any candidate and baseline,
+\begin{equation}
+\operatorname{wid}_\Gamma(\pi,\pi_b)
+\leq \kappa_\Gamma\,\mathcal M(\pi,\pi_b)
+\leq 2H\kappa_\Gamma, \label{eq:missing-budget}
+\end{equation}
+where
+$\mathcal M(\pi,\pi_b)=\sum_x|d_x^\pi-d_x^{\pi_b}|(1-q_x)$
+is the \emph{contrastive missingness budget}.
+\end{proposition}
+
+Equation~\eqref{eq:missing-budget} separates three sources of difficulty. The sensitivity factor $\kappa_\Gamma$ is determined by the assumed strength of selection; $(1-q_x)$ measures local reward missingness; and $|d_x^\pi-d_x^{\pi_b}|$ measures how much the proposed decision actually relies on that uncertain cell. Missing rewards on behavior shared by both policies may make absolute values poorly identified while contributing nothing to the contrastive budget. Near MAR, $w_\Gamma(q,p)=2(1-q)p(1-p)(\Gamma-1)+O((\Gamma-1)^2)$, so ambiguity initially grows linearly with the sensitivity departure.
+
 \begin{proposition}[Finite reward alphabet]\label{prop:finite-support}
 Let $R\in\{z_1,\ldots,z_K\}$, with observed-case probabilities $p_k$ and missing-case probabilities $v_k$. Pairwise recording-odds sensitivity is equivalent to the linear constraints
 \[
@@ -223,6 +254,33 @@ t_x&\leq(d_x-d_x^{\pi_b})u_x.\nonumber
 \begin{theorem}[Exact occupancy LP]\label{thm:lp}
 The optimum of \eqref{eq:lp} equals $\max_\pi J_\Gamma(\pi;\pi_b)$. Normalizing a feasible occupancy within each state recovers a randomized Markov policy. Since $d^{\pi_b}$ is feasible, the optimum is nonnegative.
 \end{theorem}
+
+\begin{proposition}[Randomization can be necessary]\label{prop:randomization}
+There is a one-state, horizon-one, three-action MNAR instance for which every deterministic policy has negative worst-case improvement over a randomized baseline, while the occupancy LP returns a randomized policy with certificate $0.03$.
+\end{proposition}
+
+A concrete instance has reward intervals
+$[.10,.30]$, $[.40,.80]$, and $[.45,.65]$ and baseline
+$\pi_b=(.20,.35,.45)$. Table~\ref{tab:randomization} lists the sharp certificates. The LP policy $(0,.35,.65)$ removes mass only from action 0 and moves it to action 2, so its contrast is $(-.20,0,.20)$ and its certificate is
+$-.20(.30)+.20(.45)=.03$. Every deterministic policy changes several uncertain coordinates at once and is vulnerable to a different endpoint assignment. Thus restricting the LP output to a greedy deterministic action, or rounding it after optimization, can destroy a valid guarantee.
+
+\begin{table}[t]
+\centering
+\small
+\caption{A one-step example where randomization is required for strict robust improvement.}
+\label{tab:randomization}
+\begin{tabular}{lrrrr}
+\toprule
+Policy & $\pi(a_0)$ & $\pi(a_1)$ & $\pi(a_2)$ & $J_\Gamma$ \\
+\midrule
+Baseline & .20 & .35 & .45 & .0000 \\
+Deterministic $a_0$ & 1 & 0 & 0 & $-.4925$ \\
+Deterministic $a_1$ & 0 & 1 & 0 & $-.0925$ \\
+Deterministic $a_2$ & 0 & 0 & 1 & $-.0925$ \\
+LP policy & 0 & .35 & .65 & $\mathbf{.0300}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{center}
 \fbox{\begin{minipage}{0.94\columnwidth}
@@ -295,6 +353,20 @@ J_\Gamma(\pi_\Gamma^\star)-J_\Gamma(\widehat\pi)
 \end{equation}
 Thus coverage controls power rather than validity: unvisited cells simply remain vacuous.
 
+\paragraph{Identification, estimation, and transition error.}
+The guarantee has three conceptually different layers. First, the population margin $J_\Gamma(\pi;\pi_b)$ is reduced by irreducible identification ambiguity; collecting more trajectories does not change it. Second, finite reward counts enlarge the empirical outer rectangle by at most $\rho$, costing at most $2H\rho$. Third, estimated dynamics perturb a candidate--baseline comparison through occupancy error. Keeping these terms separate prevents a common misinterpretation: failure to deploy at large $n$ may be the correct consequence of nonidentification rather than an overly conservative confidence interval.
+
+\begin{corollary}[A sufficient condition for eventual deployment]\label{cor:power}
+On the simultaneous reward and transition events, let $B_{\rm imp}$ be the transition penalty in Proposition~\ref{prop:transition}. For every fixed policy,
+\begin{equation}
+J_{\Gamma,P}(\pi;\pi_b)-
+\{\widehat J_{\Gamma,\widehat P}(\pi;\pi_b)-B_{\rm imp}\}
+\leq 2H\rho+2B_{\rm imp}. \label{eq:power-decomposition}
+\end{equation}
+Hence if some policy has population robust margin exceeding $2H\rho+2B_{\rm imp}$, the optimized adjusted certificate is strictly positive and the algorithm deploys a nonbaseline policy.
+\end{corollary}
+For known transitions, the condition reduces to $J_\Gamma>2H\rho$. Conversely, if the population optimum equals zero because every nonbaseline policy has an improvement interval crossing zero, no increase in $n$ can create a uniformly valid strict-improvement certificate.
+
 \begin{proposition}[Estimated transitions]\label{prop:transition}
 Suppose $\widehat P$ obeys
 $\max_{s,a}\|P_h(\cdot\mid s,a)-\widehat P_h(\cdot\mid s,a)\|_1\leq\eta_h$.
@@ -306,7 +378,7 @@ B_{\rm imp}=\sum_{h=1}^{H-1}(H-h)\eta_h. \label{eq:transition}
 The continuation-value span after time $h$ is at most $H-h$; total variation changes its expectation by at most $\eta_h(H-h)/2$. Summing by backward induction bounds each policy value, and applying the result to candidate and baseline yields \eqref{eq:transition}. Multinomial $\ell_1$ concentration supplies simultaneous data-dependent $\eta_h$ \citep{weissman2003inequalities}. As with reward coverage, an unseen transition row can be assigned the vacuous maximum distance two: safety survives, while power disappears.
 
 \section{Experiments}
-We test theorem-predicted phenomena, not neural-network scale. All values are exact; experiments use NumPy/SciPy on CPU and fixed seeds. Default runs comprise 1,000 bandit repetitions, 3,000 post-selection repetitions, 200 random MDPs, and 100 MDPs per sensitivity pair.
+We test theorem-predicted phenomena, not neural-network scale. All values are exact; experiments use NumPy/SciPy on CPU and fixed seeds. Default runs comprise 1,000 bandit repetitions, 3,000 post-selection repetitions, 200 random MDPs, and 100 MDPs per sensitivity pair. We report deployment because a safe method can trivially avoid harm by always returning the baseline; useful certification requires both a low harmful-deployment rate and nontrivial power.
 
 \begin{figure*}[t]
 \centering
@@ -348,6 +420,46 @@ We test theorem-predicted phenomena, not neural-network scale. All values are ex
 
 \paragraph{Sensitivity, cancellation, and ambiguity.}
 Figure~\ref{fig:population} verifies all three population claims. In the two-action example, certification disappears exactly at $\Gamma^\star=9/4$. In the shared-prefix chain, common uncertain rewards cancel from the direct bound but are counted twice by separate bounds. The minimax curves have slopes $1/2$ and $1/4$ in the symmetric contrastive case, matching Theorem~\ref{thm:minimax}.
+
+\begin{figure*}[t]
+\centering
+\begin{minipage}{0.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+width=\linewidth,height=0.58\linewidth,xmin=0,xmax=1,ymin=0,ymax=0.42,
+xlabel={Observed positive rate $p$},ylabel={Cell interval width},grid=major,
+tick label style={font=\scriptsize},label style={font=\scriptsize},
+legend style={font=\tiny,draw=none,at={(0.5,-0.22)},anchor=north}]
+\addplot+[thick,no marks] table[x=p,y=exact_width,col sep=comma,restrict expr to domain={\thisrow{q}}{0.199:0.201}]{../results/ambiguity_geometry.csv};\addlegendentry{$q=.2$}
+\addplot+[thick,no marks] table[x=p,y=exact_width,col sep=comma,restrict expr to domain={\thisrow{q}}{0.499:0.501}]{../results/ambiguity_geometry.csv};\addlegendentry{$q=.5$}
+\addplot+[thick,no marks] table[x=p,y=exact_width,col sep=comma,restrict expr to domain={\thisrow{q}}{0.799:0.801}]{../results/ambiguity_geometry.csv};\addlegendentry{$q=.8$}
+\end{axis}
+\end{tikzpicture}
+\\[-1mm]{\small (a) Geometry of identification ambiguity ($\Gamma=3$).}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+width=\linewidth,height=0.58\linewidth,xmode=log,xmin=90,xmax=11000,ymin=-0.03,ymax=1.05,
+xlabel={Logged rounds},ylabel={Certification probability},grid=major,
+tick label style={font=\scriptsize},label style={font=\scriptsize},
+legend style={font=\tiny,draw=none,at={(0.5,-0.22)},anchor=north}]
+\addplot+[thick,mark=*] table[x=n,y=q_0_1,col sep=comma]{../results/identification_estimation_lines.csv};\addlegendentry{$q=.1$}
+\addplot+[thick,mark=square*] table[x=n,y=q_0_4,col sep=comma]{../results/identification_estimation_lines.csv};\addlegendentry{$q=.4$}
+\addplot+[thick,mark=triangle*] table[x=n,y=q_0_6,col sep=comma]{../results/identification_estimation_lines.csv};\addlegendentry{$q=.6$}
+\addplot+[thick,mark=diamond*] table[x=n,y=q_0_8,col sep=comma]{../results/identification_estimation_lines.csv};\addlegendentry{$q=.8$}
+\end{axis}
+\end{tikzpicture}
+\\[-1mm]{\small (b) Identification--estimation phase diagram.}
+\end{minipage}
+\caption{Where more data helps. Left: Proposition~\ref{prop:geometry} predicts a symmetric width maximized at $p=1/2$; the maxima are exactly $(1-q)(\Gamma-1)/(\Gamma+1)$. Right: with the same observed candidate advantage, high observation rates yield a positive population margin and certification approaches one, whereas severe missingness leaves the comparison nonidentified even at $n=10{,}000$.}
+\label{fig:geometry-phase}
+\end{figure*}
+
+\paragraph{Identification geometry and the value of more data.}
+Figure~\ref{fig:geometry-phase}(a) verifies the exact envelope in Proposition~\ref{prop:geometry}. At $\Gamma=3$, the maximal widths for $q=.2,.5,.8$ are $.40,.25,.10$, respectively. Panel (b) holds the observed candidate advantage fixed while varying only $q$. At $q=.8$, certification rises from $1.9\%$ at $n=100$ to $98.9\%$ at $n=1000$; at $q=.4$, it rises more slowly from zero to $99.2\%$ by $n=10{,}000$. At $q=.1$, the population robust margin is negative, so power remains essentially zero regardless of sample size. This separates a data-limited regime from an identification-limited regime. The one-sided exact construction also improves power over reusing two-sided intervals: at $q=.6,n=1000$, certification increases from $51.3\%$ to $59.8\%$ at the same nominal safety level.
 
 \begin{figure*}[t]
 \centering
@@ -428,7 +540,7 @@ Our sharpness results use rectangular reward ambiguity and tabular contexts. Rec
 
 Transition-conditioned rewards can be handled by enlarging the cell to $(h,s,a,s')$, but this increases the number of conditionals that need reward observations. Future-state shadow variables can instead couple cells and tighten the set. One promising hybrid is to intersect approximate bridge restrictions with the $\Gamma$ set, recovering point identification when the bridge assumptions are exact and degrading continuously when they are not. The present method also assumes that the reward-observation indicator is correctly logged; misrecorded missingness would require an additional error model. Finally, $\Gamma$ must be calibrated from domain knowledge, targeted audits, or external data. Our misspecification experiment shows why optimizing it by the same observed likelihood would invalidate the intended guarantee.
 
-When rewards are MNAR, a unique optimal policy may not be supported by the log even with infinite data. Sharp partial identification exposes this ambiguity, direct baseline comparison removes only the uncertainty that truly matters, and simultaneous confidence sets preserve safety after policy search. The resulting method is computationally small but decision-theoretically exact: it improves when improvement is justified and abstains when no uniformly safe conclusion exists.
+When rewards are MNAR, a unique optimal policy may not be supported by the log even with infinite data. Sharp partial identification exposes this ambiguity, direct baseline comparison removes only the uncertainty that truly matters, and simultaneous confidence sets preserve safety after policy search. The contrastive missingness budget provides a diagnostic before optimization: proposals that differ from the baseline mainly on well-observed cells can be certifiable even when absolute returns are highly uncertain. The resulting method is computationally small but decision-theoretically exact: it improves when improvement is justified, can exploit safe randomization when deterministic policies cannot, and abstains when no uniformly safe conclusion exists.
 \label{content:end}
 
 \IfFileExists{aaai2027.bst}{\bibliographystyle{aaai2027}}{\bibliographystyle{plainnat}}
