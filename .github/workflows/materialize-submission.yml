@@ -26,16 +26,22 @@ jobs:
         with:
           ref: agent/mnar-submission-ready
           fetch-depth: 0
-      - name: Unpack frozen submission tree
+      - name: Verify frozen bundle
         shell: bash
         run: |
+          set -euxo pipefail
           shopt -s nullglob
           parts=(submission_bundle.b64.part*)
           test ${#parts[@]} -gt 0
           test -f submission_bundle.ready
           cat "${parts[@]}" | base64 --decode > /tmp/submission.tar.xz
           expected="$(tr -d '[:space:]' < submission_bundle.ready)"
-          printf '%s  %s\n' "$expected" /tmp/submission.tar.xz | sha256sum -c -
+          actual="$(sha256sum /tmp/submission.tar.xz | cut -d' ' -f1)"
+          test "$actual" = "$expected"
+      - name: Install frozen source tree
+        shell: bash
+        run: |
+          set -euxo pipefail
           mkdir -p /tmp/submission
           tar -xJf /tmp/submission.tar.xz -C /tmp/submission
           cp -a /tmp/submission/. .
@@ -44,6 +50,10 @@ jobs:
           rm -f results/baseline_quality.csv results/finite_sample.csv
           rm -f results/gamma_misspecification.csv results/post_selection.csv
           rm -f results/random_mdp.csv results/transition_uncertainty.csv
+      - name: Publish frozen source tree
+        shell: bash
+        run: |
+          set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
