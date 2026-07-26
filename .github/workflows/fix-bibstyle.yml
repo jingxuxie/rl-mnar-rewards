@@ -1,0 +1,46 @@
+name: Fix AAAI bibliography style selection
+
+on:
+  push:
+    branches:
+      - agent/expand-aaai-paper
+    paths:
+      - fix_bibstyle.ready
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/expand-aaai-paper
+          fetch-depth: 0
+      - name: Remove duplicate bibliography-style command in review mode
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          old = r'\IfFileExists{aaai2027.bst}{\bibliographystyle{aaai2027}}{\bibliographystyle{plainnat}}' + '\n' + r'\bibliography{references}'
+          new = r'''\ifAAAIReview
+            % The official AAAI style selects aaai2027.bst.
+          \else
+            \bibliographystyle{plainnat}
+          \fi
+          \bibliography{references}'''
+          for name in ('paper/main.tex', 'paper/supplement.tex'):
+              path = Path(name)
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f'expected bibliography block not found in {name}')
+              path.write_text(text.replace(old, new))
+          PY
+          rm -f fix_bibstyle.ready
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add paper/main.tex paper/supplement.tex fix_bibstyle.ready
+          git commit -m "Fix official AAAI bibliography selection"
+          git push origin HEAD:agent/expand-aaai-paper
