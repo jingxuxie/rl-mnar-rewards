@@ -1,0 +1,44 @@
+{
+  "critical_gamma": 2.24,
+  "direct_cancellation_certificate": 0.1314285714285714,
+  "separate_cancellation_certificate_at_low_observation": -0.8485714285714288,
+  "finite_sample_replicates": 500,
+  "random_mdp_instances": 200,
+  "random_mdp_summary": [
+    {
+      "method": "complete_case",
+      "mean_improvement": 0.020143564102898,
+      "median_improvement": 0.0369159848524673,
+      "unsafe_rate": 0.26,
+      "deployment_rate": 1.0
+    },
+    {
+      "method": "zero_fill",
+      "mean_improvement": -0.1867263947958712,
+      "median_improvement": -0.1436166207247879,
+      "unsafe_rate": 0.92,
+      "deployment_rate": 1.0
+    },
+    {
+      "method": "absolute_robust",
+      "mean_improvement": 0.010275644081215,
+      "median_improvement": 0.0318847297614064,
+      "unsafe_rate": 0.32,
+      "deployment_rate": 1.0
+    },
+    {
+      "method": "separate_safe",
+      "mean_improvement": 0.0,
+      "median_improvement": 0.0,
+      "unsafe_rate": 0.0,
+      "deployment_rate": 0.0
+    },
+    {
+      "method": "direct_safe",
+      "mean_improvement": 0.0492237520416818,
+      "median_improvement": 0.0489838130057109,
+      "unsafe_rate": 0.0,
+      "deployment_rate": 1.0
+    }
+  ]
+}

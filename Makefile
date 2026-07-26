@@ -7,7 +7,7 @@ experiments:
 	PYTHONPATH=src python experiments/run_all.py
 
 paper:
-	cd paper && ./build.sh
+	cd paper && bash build.sh
 
 all: test experiments paper
 

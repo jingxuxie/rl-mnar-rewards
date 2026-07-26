@@ -1,0 +1,552 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[letterpaper,margin=0.72in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{microtype}
+\usepackage{natbib}
+\usepackage{enumitem}
+\usepackage{url}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,citecolor=blue,linkcolor=blue,urlcolor=blue}
+\setlength{\columnsep}{0.23in}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prb}{\mathbb{P}}
+\newcommand{\cS}{\mathcal{S}}
+\newcommand{\cA}{\mathcal{A}}
+\newcommand{\cR}{\mathcal{R}}
+\newcommand{\cD}{\mathcal{D}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\pos}[1]{\left[#1\right]_{+}}
+\newcommand{\negp}[1]{\left[#1\right]_{-}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\odds}{\operatorname{odds}}
+\newcommand{\TV}{\operatorname{TV}}
+
+\title{Partial Identification and Safe Offline Policy Improvement\\with Rewards Missing Not at Random}
+\author{Anonymous Submission}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Offline reinforcement learning usually assumes that rewards in logged trajectories are fully observed or ignorably missing. We study finite-horizon Markov decision processes in which states, actions, and transitions are recorded, but reward observation may depend on the unobserved reward itself. We first show that policy values and optimal policies are not point identified without additional restrictions. We then introduce an odds-ratio sensitivity model indexed by $\Gamma\geq 1$. For binary rewards, we derive closed-form \emph{sharp} state--action reward intervals; finite-valued rewards reduce to small linear programs. Under rectangular sensitivity, we obtain sharp policy-value bounds and an exact lower bound on improvement over a baseline. Unlike subtracting two separately worst-case values, the direct improvement bound cancels uncertainty on occupancy shared by the candidate and baseline. Maximizing this contrastive bound is a linear program over occupancy measures. We further construct simultaneous finite-sample confidence sets and prove a post-selection-valid safe-improvement guarantee: with probability at least $1-\delta$, the learned policy is no worse than the baseline whenever the sensitivity model is valid. Small tabular experiments confirm the predicted sensitivity threshold, show large gains from uncertainty cancellation, and demonstrate zero harmful deployments in adversarial MNAR examples where complete-case learning becomes harmful with probability approaching one.
+\end{abstract}
+
+\section{Introduction}
+Offline reinforcement learning (RL) seeks to improve a decision policy using only previously logged trajectories. This is attractive precisely in domains where experimentation is costly or unsafe, including health care, public policy, and recommender systems. Yet these are also domains in which outcomes are often incompletely recorded. A conversion may be observed only after a user returns, a clinical outcome only after follow-up, or an adverse event only when it triggers a report. When reward recording depends on the latent reward, the missingness is \emph{not at random} (MNAR), and complete-case averages can remain biased even with infinite data.
+
+Recent work gives point-identification conditions for off-policy evaluation with MNAR rewards by using future states as shadow variables and solving bridge equations \citep{wei2026mnar}. Such conditions are powerful when credible, but completeness and exclusion restrictions are difficult to verify from logged data. This paper asks a complementary question:
+\begin{quote}
+\emph{What policy improvements can be justified when MNAR rewards are not point identified, but the strength of reward-dependent recording is bounded?}
+\end{quote}
+
+We answer using partial identification and sensitivity analysis. For each time-indexed state--action cell, an odds-ratio parameter $\Gamma$ bounds how much the recording odds may differ between positive and negative rewards. The analyst reports conclusions over a range of $\Gamma$, rather than treating an unverifiable missingness model as known.
+
+Our main contributions are:
+\begin{enumerate}[leftmargin=*,nosep]
+    \item We prove nonidentification without restrictions and derive closed-form sharp reward intervals for binary rewards under an odds-ratio sensitivity model. We also give a finite-support extension as a linear program.
+    \item We derive sharp policy-value and baseline-relative improvement bounds. The direct improvement bound is strictly tighter than subtracting separate value intervals; its exact gain equals the reward-interval width weighted by candidate--baseline occupancy overlap.
+    \item We show that maximizing worst-case improvement is an exact linear program over finite-horizon occupancy measures. The baseline is feasible, so the population objective is never negative.
+    \item We construct simultaneous finite-sample reward sets and prove safety for the \emph{data-dependent} optimized policy, along with a robust-regret bound and an extension for estimated transitions.
+\end{enumerate}
+
+The theory is deliberately tabular and computation-light. Its purpose is to characterize what the data can support before introducing function approximation.
+
+\section{Related Work}
+\paragraph{Incomplete and selectively observed rewards.}
+Offline RL with unlabeled transitions has been studied under reward-label scarcity, including zero labeling and reweighting \citep{yu2022unlabeled}, and under broader missing modalities in policy learning from observations \citep{li2023mahalo}. Monitored MDPs model reward observability as part of an online control problem \citep{kazemipour2025monitored}. These settings do not directly address reward-dependent missingness in a fixed offline dataset. Most closely, \citet{wei2026mnar} study OPE with MNAR rewards and obtain point identification from future-state shadow variables and bridge functions. We instead study partial identification and policy optimization when such point-identifying assumptions are unavailable or only trusted through sensitivity restrictions.
+
+\paragraph{Sensitivity analysis and partial identification.}
+Sensitivity models quantify conclusions under bounded violations of unconfoundedness or ignorability \citep{rosenbaum2002observational,manski2003partial}. In contextual policy learning, robust improvement under unobserved confounding has been studied using marginal sensitivity sets \citep{kallus2018confounding,jin2025policy,hess2025sharp}. Sequential confounding-robust evaluation has also been developed for infinite-horizon RL \citep{kallus2020confounding}. Our source of nonidentification is different: actions and transitions are observed, while the reward itself is selectively missing. This structure yields closed-form cellwise sharp sets and an exact occupancy-measure improvement program.
+
+\paragraph{Safe offline policy improvement.}
+High-confidence policy improvement and SPIBB-style methods protect a baseline against sampling and coverage error \citep{thomas2015high,laroche2019spibb}. Robust MDPs optimize against exogenously specified uncertainty sets \citep{iyengar2005robust,nilim2005robust}. Here the ambiguity set is \emph{derived sharply from the observed MNAR distribution}; moreover, our main objective compares a candidate directly with the baseline, exploiting cancellation that absolute robust planning misses.
+
+\section{Problem Formulation}
+Consider an episodic MDP with horizon $H$, finite state space $\cS$, finite action space $\cA$, initial distribution $\mu$, transition kernels $P_h$, and binary rewards $R_h\in\{0,1\}$. A Markov policy $\pi$ has occupancy
+\[
+ d_h^\pi(s,a)=\Prb_\pi(S_h=s,A_h=a),
+\]
+and value $V_r^\pi=\sum_{h,s,a}d_h^\pi(s,a)r_h(s,a)$, where $r_h(s,a)=\E[R_h\mid S_h=s,A_h=a]$.
+
+For each reward, let $M_h\in\{0,1\}$ indicate observation. Logged trajectories contain
+\[
+(S_h,A_h,S_{h+1},M_h,M_hR_h)_{h=1}^H.
+\]
+Thus transitions are observed even when rewards are not. Write $x=(h,s,a)$ and define the observable population quantities
+\[
+q_x=\Prb(M=1\mid x),\qquad
+p_x=\Prb(R=1\mid M=1,x),
+\]
+and the unobserved quantity $u_x=\Prb(R=1\mid M=0,x)$. Then
+\begin{equation}
+ r_x=q_xp_x+(1-q_x)u_x. \label{eq:reward-decomp}
+\end{equation}
+
+\begin{assumption}[Odds-ratio sensitivity]
+For a user-specified $\Gamma\geq1$, every cell satisfies
+\begin{equation}
+\frac1\Gamma\leq
+\frac{\odds(M=1\mid R=1,x)}{\odds(M=1\mid R=0,x)}
+\leq\Gamma. \label{eq:sensitivity}
+\end{equation}
+The full reward ambiguity set is rectangular across $x$.
+\end{assumption}
+At $\Gamma=1$, recording is conditionally independent of reward. Increasing $\Gamma$ permits stronger selective recording. Rectangularity states that, absent additional scientific restrictions, each cell's missingness mechanism may vary independently.
+
+\section{Sharp Partial Identification}
+We first establish why a sensitivity restriction is necessary.
+
+\begin{proposition}[Nonidentification]\label{prop:nonid}
+Without a restriction on reward-dependent missingness, policy values and the optimal policy are not identified, even with one state, two actions, horizon one, known dynamics, and infinite data.
+\end{proposition}
+\begin{proof}[Proof sketch]
+For both actions let $q=p=1/2$. In one compatible full-data model set $(u_0,u_1)=(1,0)$, giving rewards $(3/4,1/4)$; in another swap the two missing-reward probabilities. The observed law of $(A,M,MR)$ is identical, while the optimal action reverses. Full details are in Appendix~\ref{app:proofs}.
+\end{proof}
+
+Define
+\begin{equation}
+L_\Gamma(p)=\frac{p}{p+\Gamma(1-p)},\qquad
+U_\Gamma(p)=\frac{\Gamma p}{1-p+\Gamma p}. \label{eq:LU}
+\end{equation}
+
+\begin{theorem}[Sharp binary reward interval]\label{thm:cell}
+Under \eqref{eq:sensitivity}, the sharp identified set for $u_x$ is
+\[
+ u_x\in[L_\Gamma(p_x),U_\Gamma(p_x)].
+\]
+Consequently, the sharp identified interval for $r_x$ is
+\begin{align}
+\ell_{\Gamma,x}&=q_xp_x+(1-q_x)L_\Gamma(p_x),\label{eq:lower}\\
+ u_{\Gamma,x}&=q_xp_x+(1-q_x)U_\Gamma(p_x).\label{eq:upper}
+\end{align}
+Every value in this interval is attained by a full-data distribution that matches the observed law and obeys \eqref{eq:sensitivity}.
+\end{theorem}
+
+The interval width
+\begin{equation}
+ w_{\Gamma,x}=(1-q_x)\{U_\Gamma(p_x)-L_\Gamma(p_x)\} \label{eq:width}
+\end{equation}
+separates irreducible identification uncertainty from sampling error. It vanishes when all rewards are observed or $\Gamma=1$, and otherwise remains positive with infinite data.
+
+\paragraph{Finite-valued rewards.}
+For reward support $\{z_1,\ldots,z_K\}$, let $p_k=\Prb(R=z_k\mid M=1,x)$ and $v_k=\Prb(R=z_k\mid M=0,x)$. Imposing pairwise bounds
+\[
+\Gamma^{-1}\leq (p_k/v_k)/(p_j/v_j)\leq\Gamma
+\]
+produces linear constraints in $v$. Minimizing or maximizing $q\sum_kp_kz_k+(1-q)\sum_kv_kz_k$ over the simplex is therefore a small LP. For $K=2$ it reduces to Theorem~\ref{thm:cell}.
+
+\begin{theorem}[Sharp policy-value interval]\label{thm:value}
+For a fixed policy $\pi$ and known transitions, the sharp value interval is
+\begin{equation}
+\underline V_\Gamma^\pi=\sum_x d_x^\pi\ell_{\Gamma,x},\qquad
+\overline V_\Gamma^\pi=\sum_x d_x^\pi u_{\Gamma,x}. \label{eq:value-bounds}
+\end{equation}
+Thus absolute maximin planning is ordinary planning with reward $\ell_\Gamma$.
+\end{theorem}
+The result follows because occupancies are nonnegative and the ambiguity set is rectangular. Absolute maximin planning, however, need not safely improve a trusted baseline.
+
+\section{Directly Certifying Improvement}
+Let $\pi_b$ be a baseline policy and define the occupancy contrast
+\[
+ c_x^\pi=d_x^\pi-d_x^{\pi_b}.
+\]
+The sharp worst-case improvement is
+\begin{equation}
+J_\Gamma(\pi;\pi_b)
+=\inf_{r\in\cR_\Gamma}\{V_r^\pi-V_r^{\pi_b}\}. \label{eq:J}
+\end{equation}
+
+\begin{theorem}[Sharp contrastive bound]\label{thm:contrast}
+For every policy $\pi$,
+\begin{equation}
+J_\Gamma(\pi;\pi_b)=
+\sum_x\left\{\pos{c_x^\pi}\ell_{\Gamma,x}
++\negp{c_x^\pi}u_{\Gamma,x}\right\}. \label{eq:contrast}
+\end{equation}
+Moreover,
+\begin{equation}
+J_\Gamma(\pi;\pi_b)=
+\underline V_\Gamma^\pi-\overline V_\Gamma^{\pi_b}
++\sum_x\min\{d_x^\pi,d_x^{\pi_b}\}w_{\Gamma,x}. \label{eq:cancellation}
+\end{equation}
+Hence direct comparison always dominates subtracting separate value bounds, with an exact gain equal to uncertainty width weighted by shared occupancy.
+\end{theorem}
+Equation~\eqref{eq:cancellation} is central: uncertainty on behavior shared by both policies is irrelevant to their comparison and should not be paid twice.
+
+\subsection{Exact robust-improvement optimization}
+Let $\mathcal{D}(P,\mu)$ be the finite-horizon occupancy polytope, defined by nonnegativity and flow constraints
+\begin{align*}
+\sum_a d_1(s,a)&=\mu(s),\\
+\sum_a d_{h+1}(s,a)&=\sum_{s',a'}d_h(s',a')P_h(s\mid s',a').
+\end{align*}
+For each cell introduce $t_x$ and solve
+\begin{align}
+\max_{d\in\mathcal D,t}\quad &\sum_xt_x \label{eq:lp}\\
+\text{s.t.}\quad
+t_x&\leq(d_x-d_x^{\pi_b})\ell_{\Gamma,x},\nonumber\\
+t_x&\leq(d_x-d_x^{\pi_b})u_{\Gamma,x}.\nonumber
+\end{align}
+
+\begin{theorem}[Exact occupancy LP]\label{thm:lp}
+The optimum of \eqref{eq:lp} equals $\max_\pi J_\Gamma(\pi;\pi_b)$. A feasible occupancy recovers a randomized Markov policy by normalizing within each state and time. Since $d^{\pi_b}$ is feasible, the optimum is at least zero.
+\end{theorem}
+The LP has $2H|\cS||\cA|$ variables and standard flow constraints. It is therefore negligible compared with neural offline-RL training.
+
+For any fixed policy, $J_\Gamma(\pi;\pi_b)$ is nonincreasing in $\Gamma$. This motivates the robustness value
+\begin{equation}
+\Gamma^\star(\pi)=\sup\{\Gamma:J_\Gamma(\pi;\pi_b)>0\}, \label{eq:critical}
+\end{equation}
+which can be computed by bisection and reported as a sensitivity curve.
+
+\section{Finite-Sample Certificates}
+Suppose $n$ independent trajectories are logged. For each cell $x$, let $N_x$ be its visit count, $O_x$ its number of observed rewards, and $Y_x$ the number of observed positive rewards. Conditional on the visit process,
+\[
+O_x\sim\mathrm{Binomial}(N_x,q_x),\qquad
+Y_x\mid O_x\sim\mathrm{Binomial}(O_x,p_x).
+\]
+Let $[q_x^L,q_x^U]$ and $[p_x^L,p_x^U]$ be Clopper--Pearson intervals, Bonferroni corrected over the two nuisance parameters in all $D=H|\cS||\cA|$ cells \citep{clopper1934fiducial}. Define the outer reward intervals
+\begin{align}
+\widehat\ell_x&=q_x^Lp_x^L+(1-q_x^L)L_\Gamma(p_x^L),\label{eq:emp-l}\\
+\widehat u_x&=q_x^Lp_x^U+(1-q_x^L)U_\Gamma(p_x^U).\label{eq:emp-u}
+\end{align}
+Both endpoints use $q^L$: the lower endpoint increases with $q$, while the upper endpoint decreases with $q$.
+
+\begin{theorem}[Simultaneous outer identification]\label{thm:confidence}
+With probability at least $1-\delta$, simultaneously for every cell,
+\[
+[\ell_{\Gamma,x},u_{\Gamma,x}]
+\subseteq[\widehat\ell_x,\widehat u_x].
+\]
+Consequently, on the same event, the empirical contrastive objective
+\[
+\widehat J_\Gamma(\pi;\pi_b)
+=\inf_{r\in[\widehat\ell,\widehat u]}
+(V_r^\pi-V_r^{\pi_b})
+\]
+is a valid lower bound for \emph{every} policy simultaneously.
+\end{theorem}
+
+\begin{corollary}[Post-selection-safe improvement]\label{cor:safety}
+Assume known transitions. Let $\widehat\pi$ maximize $\widehat J_\Gamma$ using \eqref{eq:lp}, and return the baseline when the optimized certificate is zero. If the true mechanism satisfies the $\Gamma$-sensitivity model, then
+\[
+\Prb\{V^{\widehat\pi}\geq V^{\pi_b}\}\geq1-\delta.
+\]
+The guarantee remains valid although $\widehat\pi$ is chosen using the same confidence set.
+\end{corollary}
+
+We can also quantify conservatism. Let
+\[
+\rho=\max_x\max\{\ell_{\Gamma,x}-\widehat\ell_x,
+\widehat u_x-u_{\Gamma,x}\}.
+\]
+
+\begin{theorem}[Robust-objective regret]\label{thm:regret}
+On the simultaneous-coverage event, if $\pi_\Gamma^\star\in\argmax_\pi J_\Gamma(\pi;\pi_b)$ and $\widehat\pi\in\argmax_\pi\widehat J_\Gamma(\pi;\pi_b)$, then
+\begin{equation}
+J_\Gamma(\pi_\Gamma^\star;\pi_b)-J_\Gamma(\widehat\pi;\pi_b)
+\leq 2H\rho. \label{eq:regret}
+\end{equation}
+If nuisance estimates have uniform absolute errors $\epsilon_q,\epsilon_p$ and symmetric confidence radii of the same size, then $\rho\leq2(\epsilon_q+\Gamma\epsilon_p)$.
+\end{theorem}
+The dependence on $\Gamma$ is unavoidable qualitatively: stronger allowed selection amplifies uncertainty about rewards among missing cases.
+
+\paragraph{Estimated transitions.}
+Let $\widehat P$ satisfy $\max_{s,a}\|P_h(\cdot\mid s,a)-\widehat P_h(\cdot\mid s,a)\|_1\leq\eta_h$. Uniformly over policies and $[0,1]$ rewards,
+\[
+|V_P^\pi-V_{\widehat P}^\pi|
+\leq B_P:=\frac12\sum_{h=1}^{H-1}(H-h)\eta_h.
+\]
+Thus a certificate computed in $\widehat P$ is safe in $P$ after subtracting $2B_P$. Standard multinomial confidence sets can provide the $\eta_h$. We use known transitions in the main simulations to isolate MNAR reward uncertainty.
+
+\section{Experiments}
+All experiments use exact tabular planning and the released implementation. They run in under a minute on a laptop. Unless noted, $\Gamma$ equals the data-generating sensitivity bound.
+
+\subsection{Sensitivity and sharpness}
+In a one-state, two-action problem, the baseline and candidate have $(q,p)=(0.5,0.4)$ and $(0.5,0.6)$. Figure~\ref{fig:sensitivity} plots the sharp improvement certificate. It is positive at $\Gamma=1$, decreases monotonically, and crosses zero at $\Gamma^\star=2.25$. This produces an interpretable statement: the candidate is justified unless its outcome-dependent recording odds differ by more than a factor of $2.25$.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\columnwidth,
+    height=0.62\columnwidth,
+    xmin=1, xmax=5,
+    ymin=-0.19, ymax=0.22,
+    xlabel={Sensitivity parameter $\Gamma$},
+    ylabel={Certified improvement},
+    grid=major,
+    tick label style={font=\scriptsize},
+    label style={font=\small},
+    legend style={font=\scriptsize,draw=none,fill=none,
+        at={(0.5,-0.28)},anchor=north},
+]
+\addplot+[thick,no marks]
+    table[x=gamma,y=improvement_certificate,col sep=comma]
+    {../results/sensitivity_curve.csv};
+\addlegendentry{Sharp worst-case improvement}
+\addplot[black,dashed,domain=1:5,samples=2] {0};
+\addplot[black,dotted] coordinates {(2.25,-0.19) (2.25,0.22)};
+\node[anchor=west,font=\scriptsize] at (axis cs:2.28,0.17)
+    {$\Gamma^\star=2.25$};
+\end{axis}
+\end{tikzpicture}
+\caption{Sharp worst-case improvement versus the MNAR sensitivity parameter. The critical value is $\Gamma^\star=2.25$.}
+\label{fig:sensitivity}
+\end{figure}
+
+\subsection{Cancellation of shared uncertainty}
+We construct a four-step deterministic chain. Candidate and baseline share the first three actions, whose rewards are heavily missing, and differ only at the final action. Figure~\ref{fig:cancellation} varies the observation rate on the shared rewards. The direct bound remains $0.131$ because shared cells cancel exactly. Subtracting separate value bounds is negative over most of the range, reaching $-0.849$ at a $2\%$ observation rate. Thus absolute value uncertainty can be large while policy improvement is still pointwise certifiable.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\columnwidth,
+    height=0.62\columnwidth,
+    xmin=0, xmax=1,
+    ymin=-0.9, ymax=0.2,
+    xlabel={Observation rate on shared rewards},
+    ylabel={Certified improvement},
+    grid=major,
+    tick label style={font=\scriptsize},
+    label style={font=\small},
+    legend style={font=\scriptsize,draw=none,fill=none,
+        at={(0.5,-0.28)},anchor=north},
+]
+\addplot+[thick,no marks]
+    table[x=shared_observation_rate,y=direct_contrastive_bound,col sep=comma]
+    {../results/cancellation_curve.csv};
+\addlegendentry{Direct improvement bound}
+\addplot+[thick,no marks]
+    table[x=shared_observation_rate,y=separate_value_bound,col sep=comma]
+    {../results/cancellation_curve.csv};
+\addlegendentry{Separate value bounds}
+\addplot[black,dashed,domain=0:1,samples=2] {0};
+\end{axis}
+\end{tikzpicture}
+\caption{Direct comparison cancels uncertainty on shared occupancy; separate value bounds pay it twice.}
+\label{fig:cancellation}
+\end{figure}
+
+\subsection{Finite-sample safety and power}
+We simulate 500 datasets at each sample size in two logged bandits. In the adversarial null, observed complete-case means favor the candidate by $0.2$, but MNAR missing rewards make its true value $0.04$ lower than the baseline. In the robust alternative, the candidate is better under every compatible model. Figure~\ref{fig:finite} shows that the simultaneous certificate makes no harmful deployment in the null, while the complete-case rule becomes harmful with probability one. On the alternative, robust certification power rises from $1.2\%$ at $n=100$ to $99.4\%$ at $n=1000$.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\columnwidth,
+    height=0.64\columnwidth,
+    xmode=log,
+    xmin=90, xmax=11000,
+    ymin=-0.03, ymax=1.05,
+    xlabel={Number of logged bandit rounds},
+    ylabel={Probability},
+    grid=major,
+    tick label style={font=\scriptsize},
+    label style={font=\small},
+    legend style={font=\scriptsize,draw=none,fill=none,
+        at={(0.5,-0.30)},anchor=north},
+]
+\addplot+[thick,mark=*]
+    table[x=n,y=robust_power,col sep=comma]
+    {../results/finite_sample_plot.csv};
+\addlegendentry{Robust power (alternative)}
+\addplot+[thick,mark=square*]
+    table[x=n,y=robust_false_deployment,col sep=comma]
+    {../results/finite_sample_plot.csv};
+\addlegendentry{Robust false deployment (null)}
+\addplot+[thick,mark=triangle*]
+    table[x=n,y=plugin_false_deployment,col sep=comma]
+    {../results/finite_sample_plot.csv};
+\addlegendentry{Plug-in false deployment (null)}
+\addplot[black,dotted,domain=90:11000,samples=2] {0.05};
+\end{axis}
+\end{tikzpicture}
+\caption{Empirical safety and power over 500 repetitions. The robust method is conservative at small $n$ but approaches full power; complete-case selection confidently deploys the harmful policy under MNAR.}
+\label{fig:finite}
+\end{figure}
+
+\subsection{Random tabular MDPs}
+We generate 200 MDPs with $H=4$, five states, three actions, and $\Gamma=3$. Reward observation rates are between $0.10$ and $0.55$. The baseline is a $0.1$-soft version of the true optimal policy, creating a stringent improvement task. Table~\ref{tab:random} reports population results, isolating identification rather than sampling error.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Results on 200 random MNAR MDPs. Improvement is relative to the baseline.}
+\label{tab:random}
+\begin{tabular}{lrrr}
+\toprule
+Method & Mean imp. & Unsafe & Deploy \\
+\midrule
+Complete case & 0.020 & 26\% & 100\% \\
+Zero fill & $-0.187$ & 92\% & 100\% \\
+Absolute robust & 0.010 & 32\% & 100\% \\
+Separate safe & 0.000 & 0\% & 0\% \\
+Direct safe (ours) & \textbf{0.049} & \textbf{0\%} & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Complete-case and absolute maximin policies are harmful on $26\%$ and $32\%$ of instances. Separate safe bounds never deploy because common uncertainty dominates. Direct robust improvement is safe on every instance and achieves the largest mean improvement, validating both the need for a baseline-relative objective and the benefit of cancellation.
+
+\section{Discussion and Limitations}
+The sensitivity parameter $\Gamma$ is not identified from observed MNAR data. This is a feature of sensitivity analysis, not a tuning parameter to be optimized by observed likelihood. Analysts should report a curve over scientifically plausible values and, where possible, calibrate $\Gamma$ using external audits or domain knowledge.
+
+Our sharp results rely on rectangular reward ambiguity and tabular contexts. Structural restrictions that couple missingness across states may tighten the set but can also make optimization nonrectangular. Function approximation introduces a second source of extrapolation error that should be handled separately from reward identification. Finally, future-state shadow variables can potentially shrink our intervals; intersecting approximate bridge restrictions with the sensitivity set is a promising extension.
+
+\section{Conclusion}
+When rewards are missing not at random, offline RL may not have a uniquely identified optimal policy, even with unlimited data. Rather than silently imputing rewards, we derive the full set of conclusions supported by a bounded-selection model. The resulting sharp contrastive bounds reveal that policy improvement can be much easier to certify than two absolute policy values, because uncertainty on shared behavior cancels. This observation leads to an exact occupancy LP, finite-sample safety guarantees, and a practical sensitivity curve. The broader message is that safe offline policy learning should distinguish statistical uncertainty from irreducible nonidentification and abstain when the logged data cannot support an improvement.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\clearpage
+\appendix
+\section{Proofs}\label{app:proofs}
+
+\subsection{Proof of Proposition~\ref{prop:nonid}}
+Take one state, two actions, and horizon one. Suppose the behavior policy samples both actions with positive probability. For each action, let
+\[
+\Prb(M=1\mid A=a)=\tfrac12,
+\qquad
+\Prb(R=1\mid M=1,A=a)=\tfrac12.
+\]
+These quantities determine the observed distribution. In model $\mathsf{M}_1$, choose
+$\Prb(R=1\mid M=0,A=0)=1$ and
+$\Prb(R=1\mid M=0,A=1)=0$. Equation~\eqref{eq:reward-decomp} gives mean rewards $(3/4,1/4)$. In model $\mathsf{M}_2$, swap the two missing-case probabilities, giving $(1/4,3/4)$. Both models induce the same distribution of $(A,M,MR)$ but have opposite optimal actions. Therefore neither values nor the optimal policy are identified.
+
+\subsection{Proof of Theorem~\ref{thm:cell}}
+Suppress $x$. The four conditional joint probabilities given $x$ are
+\begin{align*}
+\Prb(M=1,R=1)&=qp,&
+\Prb(M=1,R=0)&=q(1-p),\\
+\Prb(M=0,R=1)&=(1-q)u,&
+\Prb(M=0,R=0)&=(1-q)(1-u).
+\end{align*}
+For interior probabilities, Bayes' rule gives
+\begin{align*}
+\frac{\odds(M=1\mid R=1)}{\odds(M=1\mid R=0)}
+&=\frac{qp/\{(1-q)u\}}{q(1-p)/\{(1-q)(1-u)\}}\\
+&=\frac{p(1-u)}{(1-p)u}
+=\frac{\odds(p)}{\odds(u)}.
+\end{align*}
+Therefore \eqref{eq:sensitivity} is equivalent to
+\[
+\frac{\odds(p)}{\Gamma}\leq\odds(u)\leq
+\Gamma\odds(p).
+\]
+Applying the inverse-odds map $z\mapsto z/(1+z)$ yields \eqref{eq:LU}. Equation~\eqref{eq:reward-decomp} is increasing in $u$, giving \eqref{eq:lower}--\eqref{eq:upper}.
+
+For sharpness, choose any $u$ in the displayed interval and define the four-cell table above. It is a valid distribution, reproduces the observed $(q,p)$, and its odds ratio lies in $[1/\Gamma,\Gamma]$. Its reward mean is $qp+(1-q)u$. Since this map is continuous and increasing, every point in the reward interval is attained. Boundary cases follow by continuity.
+
+\subsection{Finite-support extension}
+Let $p_k=\Prb(R=z_k\mid M=1,x)$ and $v_k=\Prb(R=z_k\mid M=0,x)$. The ratio of recording odds for categories $k$ and $j$ is
+\[
+\frac{\odds(M=1\mid R=z_k)}{\odds(M=1\mid R=z_j)}
+=\frac{p_kv_j}{p_jv_k}.
+\]
+Thus pairwise $\Gamma$ bounds are equivalent to
+\[
+p_kv_j\leq\Gamma p_jv_k,
+\qquad
+p_jv_k\leq\Gamma p_kv_j,
+\]
+which are linear in $v$. Together with $v\geq0$ and $\sum_kv_k=1$, they define a polytope. The reward mean is linear in $v$, so its sharp endpoints are the minima and maxima of the stated LP. Every feasible $v$ constructs a compatible joint distribution exactly as in the binary proof.
+
+\subsection{Proof of Theorem~\ref{thm:value}}
+For fixed $P$ and $\pi$, the occupancy $d^\pi$ is fixed and does not depend on the reward law. Hence
+\[
+V_r^\pi=\sum_xd_x^\pi r_x.
+\]
+Every coefficient is nonnegative and $\cR_\Gamma=\prod_x[\ell_x,u_x]$. The minimum and maximum are therefore attained by choosing every coordinate at its lower or upper endpoint, respectively. Cellwise sharpness from Theorem~\ref{thm:cell} and rectangularity imply joint attainability.
+
+\subsection{Proof of Theorem~\ref{thm:contrast}}
+Write $c_x=d_x^\pi-d_x^{\pi_b}$. Rectangularity gives
+\[
+\inf_{r\in\cR_\Gamma}\sum_xc_xr_x
+=\sum_x\inf_{r_x\in[\ell_x,u_x]}c_xr_x.
+\]
+The scalar infimum equals $c_x\ell_x$ if $c_x\geq0$ and $c_xu_x$ otherwise, proving \eqref{eq:contrast}.
+
+For \eqref{eq:cancellation}, compare one cell with the separate term $d_x^\pi\ell_x-d_x^{\pi_b}u_x$. If $c_x\geq0$, their difference is $d_x^{\pi_b}(u_x-\ell_x)$. If $c_x<0$, it is $d_x^\pi(u_x-\ell_x)$. In either case it equals $\min\{d_x^\pi,d_x^{\pi_b}\}w_x$. Summing proves the identity.
+
+\subsection{Proof of Theorem~\ref{thm:lp}}
+The occupancy polytope is exactly the set of occupancies induced by randomized Markov policies. For a fixed occupancy $d$, Theorem~\ref{thm:contrast} can be written
+\[
+\sum_x\min\{(d_x-d_x^b)\ell_x,(d_x-d_x^b)u_x\}.
+\]
+The hypograph of each minimum is represented by the two linear constraints in \eqref{eq:lp}. Maximizing over $t$ makes each constraint tight at the smaller affine value. Maximizing over the occupancy polytope therefore equals maximizing the sharp robust-improvement objective over policies. Given $d$, normalization recovers a policy on every state with positive occupancy; actions at unreachable states are arbitrary. Taking $d=d^{\pi_b}$ and $t=0$ proves nonnegativity of the optimum.
+
+\subsection{Proof of Theorem~\ref{thm:confidence}}
+Conditional on the visit counts, Clopper--Pearson coverage and a union bound imply simultaneous coverage of all $q_x$ and $p_x$ with probability at least $1-\delta$. The lower endpoint $\ell(q,p)$ is increasing in both arguments. The upper endpoint $u(q,p)$ is decreasing in $q$ and increasing in $p$. Therefore, on the nuisance-coverage event,
+\[
+\widehat\ell_x=\ell(q_x^L,p_x^L)\leq\ell(q_x,p_x),
+\qquad
+u(q_x,p_x)\leq u(q_x^L,p_x^U)=\widehat u_x.
+\]
+Theorem~\ref{thm:cell} places the true reward mean inside the population interval, which is contained in the empirical outer interval. Since this containment holds cellwise and simultaneously, it holds for the entire rectangular reward model and therefore for every policy, including a data-dependent optimizer.
+
+\subsection{Proof of Corollary~\ref{cor:safety}}
+On the event in Theorem~\ref{thm:confidence}, the true reward vector belongs to $[\widehat\ell,\widehat u]$. Hence for every $\pi$,
+\[
+V_r^\pi-V_r^{\pi_b}\geq\widehat J_\Gamma(\pi;\pi_b).
+\]
+The optimized empirical objective is at least zero because the baseline is feasible. If it is positive, the returned policy improves under the true reward vector; if it is zero, the algorithm returns the baseline. The event has probability at least $1-\delta$.
+
+\subsection{Proof of Theorem~\ref{thm:regret}}
+Let $J$ and $\widehat J$ denote the population and outer-set objectives. Outer containment gives $\widehat J(\pi)\leq J(\pi)$. For any policy,
+\begin{align*}
+J(\pi)-\widehat J(\pi)
+&\leq\rho\sum_x|d_x^\pi-d_x^{\pi_b}|\\
+&\leq2H\rho,
+\end{align*}
+where the last inequality uses that at every time both occupancies are probability distributions and hence have $\ell_1$ distance at most two. By optimality of $\widehat\pi$ for $\widehat J$,
+\begin{align*}
+J(\pi_\Gamma^\star)-J(\widehat\pi)
+&\leq J(\pi_\Gamma^\star)-\widehat J(\pi_\Gamma^\star)\\
+&\quad+\widehat J(\widehat\pi)-J(\widehat\pi)\\
+&\leq2H\rho.
+\end{align*}
+For the final statement, direct differentiation shows that $L_\Gamma$ and $U_\Gamma$ are $\Gamma$-Lipschitz on $[0,1]$, while both reward endpoints are one-Lipschitz in $q$. A symmetric nuisance interval of radius $\epsilon$ can place its outer endpoint at most $2\epsilon$ from the truth, yielding $\rho\leq2(\epsilon_q+\Gamma\epsilon_p)$.
+
+\subsection{Transition simulation bound}
+For any fixed policy, let $V_{h+1}$ be its continuation value under one transition model. Its span is at most $H-h$. The difference in expectations under two transition rows is at most one half their $\ell_1$ distance times this span. Backward induction and summation yield
+\[
+\sup_{\pi,r\in[0,1]}|V_P^\pi-V_{\widehat P}^\pi|
+\leq\frac12\sum_{h=1}^{H-1}(H-h)\eta_h=B_P.
+\]
+Applying the bound once to the candidate and once to the baseline shows that a $\widehat P$-based improvement certificate minus $2B_P$ is valid under $P$.
+
+\section{Additional Experimental Details}
+\paragraph{Random MDP generation.}
+Transition rows are drawn independently from a symmetric Dirichlet distribution with concentration $0.7$. Observed positive-reward probabilities are uniform on $[0.12,0.88]$, and observation probabilities are uniform on $[0.10,0.55]$. We sample a cellwise odds ratio log-uniformly from $[1/3,3]$ and solve for the missing-case success probability, ensuring the true model lies in the $\Gamma=3$ class. The baseline is a mixture assigning $0.9$ mass to the true optimal action and $0.1$ uniformly over actions. This synthetic use of the oracle only constructs a difficult, near-optimal baseline; no evaluated method receives the true reward.
+
+\paragraph{Methods.}
+Complete case optimizes $p_x$; zero fill optimizes $q_xp_x$; absolute robust optimizes $\ell_x$; separate safe deploys the absolute-robust policy only if $\underline V^\pi-\overline V^{\pi_b}>0$; direct safe solves \eqref{eq:lp}. Values are evaluated exactly under the latent full reward means.
+
+\paragraph{Reproducibility.}
+The public repository contains the full implementation, deterministic random seeds, generated CSV files, plotting code, and unit tests checking endpoint sharpness and LP validity. Running
+\begin{verbatim}
+python experiments/run_all.py
+\end{verbatim}
+regenerates all results and figures.
+
+\end{document}

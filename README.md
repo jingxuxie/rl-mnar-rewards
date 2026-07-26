@@ -19,7 +19,7 @@ This repository studies offline reinforcement learning when states, actions, and
 python -m pip install -e '.[dev]'
 pytest
 python experiments/run_all.py
-cd paper && ./build.sh
+cd paper && bash build.sh
 ```
 
 The experiment script regenerates all CSV files and figures with fixed random seeds. The default run evaluates 200 random MDPs and 500 finite-sample repetitions per setting.
