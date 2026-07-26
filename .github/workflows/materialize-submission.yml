@@ -1,11 +1,6 @@
 name: Materialize submission candidate
 
 on:
-  push:
-    branches:
-      - agent/mnar-submission-ready
-    paths:
-      - submission_bundle.ready
   pull_request:
     branches:
       - main
@@ -19,7 +14,7 @@ permissions:
 
 jobs:
   materialize:
-    if: ${{ github.head_ref == 'agent/mnar-submission-ready' || github.ref_name == 'agent/mnar-submission-ready' }}
+    if: ${{ github.head_ref == 'agent/mnar-submission-ready' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,30 +22,39 @@ jobs:
           ref: agent/mnar-submission-ready
           fetch-depth: 0
       - name: Verify frozen bundle
+        id: verify
         shell: bash
         run: |
           set -euxo pipefail
+          if [[ ! -f submission_bundle.ready ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           shopt -s nullglob
           parts=(submission_bundle.b64.part*)
           test ${#parts[@]} -gt 0
-          test -f submission_bundle.ready
           cat "${parts[@]}" | base64 --decode > /tmp/submission.tar.xz
           expected="$(tr -d '[:space:]' < submission_bundle.ready)"
           actual="$(sha256sum /tmp/submission.tar.xz | cut -d' ' -f1)"
           test "$actual" = "$expected"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
       - name: Install frozen source tree
+        if: steps.verify.outputs.skip != 'true'
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p /tmp/submission
           tar -xJf /tmp/submission.tar.xz -C /tmp/submission
           cp -a /tmp/submission/. .
+          git checkout HEAD -- .github/workflows/ci.yml
+          git checkout HEAD -- .github/workflows/materialize-submission.yml
+          rm -f .github/workflows/paper.yml
           rm -f submission_bundle.b64.part* submission_bundle.ready
-          rm -f .github/workflows/materialize-submission.yml
           rm -f results/baseline_quality.csv results/finite_sample.csv
           rm -f results/gamma_misspecification.csv results/post_selection.csv
           rm -f results/random_mdp.csv results/transition_uncertainty.csv
-      - name: Publish frozen source tree
+      - name: Commit frozen source tree
+        if: steps.verify.outputs.skip != 'true'
         shell: bash
         run: |
           set -euxo pipefail
@@ -58,4 +62,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Finalize proofs, experiments, and AAAI submission package"
+      - name: Push frozen source tree
+        if: steps.verify.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euxo pipefail
           git push origin HEAD:agent/mnar-submission-ready
