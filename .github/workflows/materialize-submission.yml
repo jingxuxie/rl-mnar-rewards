@@ -24,6 +24,8 @@ jobs:
           parts=(submission_bundle.b64.part*)
           test ${#parts[@]} -gt 0
           cat "${parts[@]}" | base64 --decode > /tmp/submission.tar.xz
+          expected="$(tr -d '[:space:]' < submission_bundle.ready)"
+          printf '%s  %s\n' "$expected" /tmp/submission.tar.xz | sha256sum -c -
           mkdir -p /tmp/submission
           tar -xJf /tmp/submission.tar.xz -C /tmp/submission
           cp -a /tmp/submission/. .
