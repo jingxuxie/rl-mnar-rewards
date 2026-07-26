@@ -543,7 +543,7 @@ Transition-conditioned rewards can be handled by enlarging the cell to $(h,s,a,s
 When rewards are MNAR, a unique optimal policy may not be supported by the log even with infinite data. Sharp partial identification exposes this ambiguity, direct baseline comparison removes only the uncertainty that truly matters, and simultaneous confidence sets preserve safety after policy search. The contrastive missingness budget provides a diagnostic before optimization: proposals that differ from the baseline mainly on well-observed cells can be certifiable even when absolute returns are highly uncertain. The resulting method is computationally small but decision-theoretically exact: it improves when improvement is justified, can exploit safe randomization when deterministic policies cannot, and abstains when no uniformly safe conclusion exists.
 \label{content:end}
 
-\ifAAAIReview
+\ifAAAIFormat
   % The official AAAI style selects aaai2027.bst.
 \else
   \bibliographystyle{plainnat}
