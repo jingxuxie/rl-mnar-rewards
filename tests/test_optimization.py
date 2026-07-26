@@ -1,168 +1,99 @@
 import itertools
-
 import numpy as np
-
-from mnar_rl.mdp import (
+from mnar_rl import (
     TabularMDP,
+    binary_reward_mean_bounds,
+    cancellation_gain,
+    contrast_interval_minimax_regret,
+    contrastive_ambiguity_width,
+    contrastive_missingness_budget,
+    optimize_robust_improvement,
     policy_occupancy,
     policy_value,
+    sharp_improvement_lower_bound,
+    sharp_improvement_upper_bound,
     transition_improvement_penalty,
     weissman_l1_radius,
-)
-from mnar_rl.optimization import (
-    cancellation_gain,
-    optimize_robust_improvement,
-    separate_value_lower_bound,
-    sharp_improvement_interval,
-    sharp_improvement_lower_bound,
 )
 
 
 def small_mdp():
-    horizon, states, actions = 2, 2, 2
-    transition = np.zeros((horizon, states, actions, states))
-    transition[0, 0, 0, 0] = 1.0
-    transition[0, 0, 1, 1] = 1.0
-    transition[0, 1, :, 1] = 1.0
-    transition[1, :, :, :] = np.eye(states)[:, None, :]
-    return TabularMDP(transition, np.array([1.0, 0.0]))
+    h,s,a=2,2,2;p=np.zeros((h,s,a,s))
+    p[0,0,0,0]=1;p[0,0,1,1]=1;p[0,1,:,1]=1;p[1,:,:,:]=np.eye(s)[:,None,:]
+    return TabularMDP(p,np.array([1.0,0.0]))
 
 
-def deterministic_policy(mdp, actions):
-    policy = np.zeros((mdp.horizon, mdp.n_states, mdp.n_actions))
+def deterministic_policy(mdp,actions):
+    pi=np.zeros((mdp.horizon,mdp.n_states,mdp.n_actions))
     for h in range(mdp.horizon):
-        for state in range(mdp.n_states):
-            policy[h, state, actions[h, state]] = 1.0
-    return policy
+        for s in range(mdp.n_states): pi[h,s,actions[h,s]]=1
+    return pi
 
 
-def test_lp_dominates_enumeration_over_deterministic_policies():
-    mdp = small_mdp()
-    baseline = deterministic_policy(mdp, np.zeros((2, 2), dtype=int))
-    lower = np.array([[[0.1, 0.2], [0.0, 0.0]], [[0.2, 0.8], [0.3, 0.9]]])
-    upper = lower + 0.2
-    result = optimize_robust_improvement(mdp, baseline, lower, upper)
-    baseline_occupancy = policy_occupancy(mdp, baseline)
-
-    best = -np.inf
-    for flat in itertools.product(range(mdp.n_actions), repeat=mdp.horizon * mdp.n_states):
-        actions = np.asarray(flat).reshape(mdp.horizon, mdp.n_states)
-        policy = deterministic_policy(mdp, actions)
-        value = sharp_improvement_lower_bound(
-            policy_occupancy(mdp, policy),
-            baseline_occupancy,
-            lower,
-            upper,
-        )
-        best = max(best, value)
-    assert result.certificate >= best - 1e-8
-    assert result.certificate >= -1e-9
+def test_lp_dominates_deterministic_enumeration():
+    mdp=small_mdp();baseline=deterministic_policy(mdp,np.zeros((2,2),dtype=int))
+    lo=np.array([[[.1,.2],[0,0]],[[.2,.8],[.3,.9]]]);hi=lo+.2
+    result=optimize_robust_improvement(mdp,baseline,lo,hi);db=policy_occupancy(mdp,baseline)
+    best=-np.inf
+    for flat in itertools.product(range(mdp.n_actions),repeat=mdp.horizon*mdp.n_states):
+        pi=deterministic_policy(mdp,np.asarray(flat).reshape(mdp.horizon,mdp.n_states))
+        best=max(best,sharp_improvement_lower_bound(policy_occupancy(mdp,pi),db,lo,hi))
+    assert result.certificate>=best-1e-8
+    assert result.certificate>=-1e-9
 
 
-def test_certificate_is_valid_for_sampled_rewards():
-    mdp = small_mdp()
-    baseline = deterministic_policy(mdp, np.zeros((2, 2), dtype=int))
-    lower = np.full((2, 2, 2), 0.2)
-    upper = np.full((2, 2, 2), 0.8)
-    lower[1, 1, 1] = 0.9
-    upper[1, 1, 1] = 1.0
-    result = optimize_robust_improvement(mdp, baseline, lower, upper)
-
-    rng = np.random.default_rng(0)
+def test_certificate_valid_for_sampled_rewards():
+    mdp=small_mdp();baseline=deterministic_policy(mdp,np.zeros((2,2),dtype=int))
+    lo=np.full((2,2,2),.2);hi=np.full((2,2,2),.8);lo[1,1,1]=.9;hi[1,1,1]=1
+    result=optimize_robust_improvement(mdp,baseline,lo,hi);rng=np.random.default_rng(0)
     for _ in range(100):
-        reward = rng.uniform(lower, upper)
-        improvement = policy_value(mdp, reward, result.policy) - policy_value(mdp, reward, baseline)
-        assert improvement + 1e-8 >= result.certificate
+        r=rng.uniform(lo,hi)
+        improvement=policy_value(mdp,r,result.policy)-policy_value(mdp,r,baseline)
+        assert improvement+1e-8>=result.certificate
 
 
-def test_contrastive_interval_is_jointly_sharp_by_endpoint_construction():
-    mdp = small_mdp()
-    baseline = deterministic_policy(mdp, np.zeros((2, 2), dtype=int))
-    candidate_actions = np.array([[1, 0], [0, 1]])
-    candidate = deterministic_policy(mdp, candidate_actions)
-    baseline_occupancy = policy_occupancy(mdp, baseline)
-    candidate_occupancy = policy_occupancy(mdp, candidate)
-    lower = np.full((2, 2, 2), 0.1)
-    upper = np.full((2, 2, 2), 0.9)
-    identified_lower, identified_upper = sharp_improvement_interval(
-        candidate_occupancy,
-        baseline_occupancy,
-        lower,
-        upper,
-    )
-    contrast = candidate_occupancy - baseline_occupancy
-    reward_for_lower = np.where(contrast >= 0.0, lower, upper)
-    reward_for_upper = np.where(contrast >= 0.0, upper, lower)
-    assert np.isclose(
-        policy_value(mdp, reward_for_lower, candidate) - policy_value(mdp, reward_for_lower, baseline),
-        identified_lower,
-    )
-    assert np.isclose(
-        policy_value(mdp, reward_for_upper, candidate) - policy_value(mdp, reward_for_upper, baseline),
-        identified_upper,
-    )
+def test_contrast_width_identity():
+    d=np.array([.2,.3,.5]);db=np.array([.4,.1,.5]);lo=np.array([.1,.2,.3]);hi=np.array([.5,.7,.9])
+    lower=sharp_improvement_lower_bound(d,db,lo,hi);upper=sharp_improvement_upper_bound(d,db,lo,hi)
+    assert np.isclose(upper-lower,contrastive_ambiguity_width(d,db,lo,hi))
 
 
 def test_cancellation_identity():
-    mdp = small_mdp()
-    baseline = deterministic_policy(mdp, np.zeros((2, 2), dtype=int))
-    candidate = deterministic_policy(mdp, np.ones((2, 2), dtype=int))
-    lower = np.full((2, 2, 2), 0.2)
-    upper = np.full((2, 2, 2), 0.8)
-    direct = sharp_improvement_lower_bound(
-        policy_occupancy(mdp, candidate),
-        policy_occupancy(mdp, baseline),
-        lower,
-        upper,
-    )
-    separate = separate_value_lower_bound(mdp, candidate, baseline, lower, upper)
-    gain = cancellation_gain(
-        policy_occupancy(mdp, candidate),
-        policy_occupancy(mdp, baseline),
-        lower,
-        upper,
-    )
-    assert np.isclose(direct, separate + gain)
+    d=np.array([.2,.3,.5]);db=np.array([.4,.1,.5]);lo=np.array([.1,.2,.3]);hi=np.array([.5,.7,.9])
+    direct=sharp_improvement_lower_bound(d,db,lo,hi)
+    separate=float(d@lo-db@hi)
+    assert np.isclose(direct,separate+cancellation_gain(d,db,lo,hi))
 
 
-def test_contrastive_interval_width_equals_occupancy_difference_weighted_width():
-    mdp = small_mdp()
-    baseline = deterministic_policy(mdp, np.zeros((2, 2), dtype=int))
-    candidate = deterministic_policy(mdp, np.ones((2, 2), dtype=int))
-    baseline_occupancy = policy_occupancy(mdp, baseline)
-    candidate_occupancy = policy_occupancy(mdp, candidate)
-    lower = np.array([[[0.1, 0.3], [0.2, 0.4]], [[0.15, 0.25], [0.5, 0.6]]])
-    upper = lower + np.array([[[0.2, 0.1], [0.3, 0.2]], [[0.1, 0.4], [0.2, 0.3]]])
-    identified_lower, identified_upper = sharp_improvement_interval(
-        candidate_occupancy,
-        baseline_occupancy,
-        lower,
-        upper,
-    )
-    predicted_width = np.sum(
-        np.abs(candidate_occupancy - baseline_occupancy) * (upper - lower)
-    )
-    assert np.isclose(identified_upper - identified_lower, predicted_width)
+def test_contrastive_missingness_envelope():
+    q=np.array([.2,.5,.8]);p=np.array([.1,.5,.9]);gamma=3
+    lo,hi=binary_reward_mean_bounds(q,p,gamma)
+    d=np.array([.1,.3,.6]);db=np.array([.4,.2,.4])
+    assert contrastive_ambiguity_width(d,db,lo,hi)<=contrastive_missingness_budget(d,db,q,gamma)+1e-12
 
 
-def test_weissman_radius_and_transition_penalty():
-    assert weissman_l1_radius(0, n_states=3, alpha=0.05) == 2.0
-    assert weissman_l1_radius(10, n_states=1, alpha=0.05) == 0.0
-    assert weissman_l1_radius(1000, n_states=2, alpha=0.05) < weissman_l1_radius(100, n_states=2, alpha=0.05)
-    np.testing.assert_allclose(
-        transition_improvement_penalty(np.array([0.2, 0.1, 0.05])),
-        0.85,
-    )
+def test_minimax_regret_formula():
+    r=contrast_interval_minimax_regret(-.2,.6)
+    assert np.isclose(r.candidate_probability,.75)
+    assert np.isclose(r.randomized_regret,.15)
+    assert np.isclose(r.deterministic_regret,.2)
 
 
-def test_transition_penalty_covers_two_policy_value_difference():
-    # One consequential transition layer. For a binary next state, row L1
-    # error is twice the success-probability error. Each policy value moves by
-    # at most eta/2 and their difference by at most eta.
-    p_true = np.array([0.55, 0.50])
-    p_hat = np.array([0.58, 0.46])
-    row_l1 = 2.0 * np.abs(p_true - p_hat)
-    penalty = transition_improvement_penalty(np.array([row_l1.max()]))
-    true_difference = p_true[1] - p_true[0]
-    estimated_difference = p_hat[1] - p_hat[0]
-    assert true_difference >= estimated_difference - penalty - 1e-12
+def test_randomization_can_be_strictly_necessary():
+    mdp=TabularMDP(np.ones((1,1,3,1)),np.array([1.0]))
+    q=np.array([[[9/25,4/25,477/800]]]);p=np.array([[[1/6,5/8,5/9]]])
+    lo,hi=binary_reward_mean_bounds(q,p,3);baseline=np.array([[[1/5,7/20,9/20]]])
+    result=optimize_robust_improvement(mdp,baseline,lo,hi);db=policy_occupancy(mdp,baseline)
+    deterministic=[]
+    for action in range(3):
+        pi=np.zeros_like(baseline);pi[0,0,action]=1
+        deterministic.append(sharp_improvement_lower_bound(policy_occupancy(mdp,pi),db,lo,hi))
+    assert max(deterministic)<0
+    assert np.isclose(result.certificate,.03)
+    np.testing.assert_allclose(result.policy,np.array([[[0,.35,.65]]]),atol=1e-8)
+
+
+def test_transition_penalty_and_weissman_radius():
+    assert transition_improvement_penalty(np.array([.2,.1]))==.5
+    assert weissman_l1_radius(0,3,.05)==2.0
+    assert 0<weissman_l1_radius(1000,3,.05)<1

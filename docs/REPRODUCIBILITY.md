@@ -13,7 +13,7 @@ The frozen full run was executed on:
 - pandas 2.2.3
 - Matplotlib 3.10.8
 
-No GPU was used. Wall-clock time for the complete experiment command was 28 seconds; peak resident memory was approximately 276 MiB.
+No GPU was used. The complete reference experiment command finishes in under 30 seconds on this environment; peak resident memory is approximately 276 MiB.
 
 ## Installation
 
@@ -29,17 +29,18 @@ The project requires Python 3.10 or newer. The runtime dependencies are declared
 pytest
 ```
 
-The frozen release contains 14 tests covering:
+The revised release contains 15 tests covering:
 
 - collapse at `Gamma=1`;
 - odds-ratio saturation at both binary endpoints;
 - monotone interval expansion;
 - equality of binary and finite-support LP bounds;
+- the closed-form ambiguity width and its sharp envelope;
 - one-sided outer confidence mapping;
 - point-baseline and general contrastive minimax formulas;
 - sharp improvement endpoint constructions;
 - cancellation identity and interval width;
-- occupancy-LP validity;
+- occupancy-LP validity and a strict randomization-necessity construction;
 - Weissman radii and transition penalties.
 
 ## Full experiment command
@@ -82,6 +83,9 @@ No simulator return is used to tune an evaluated policy. Latent rewards are used
 The command regenerates:
 
 - `results/sensitivity_curve.csv`
+- `results/ambiguity_geometry.csv`
+- `results/randomization_necessity.csv`
+- `results/identification_estimation_phase.csv`, `identification_estimation_phase_plot.csv`, `identification_estimation_lines.csv`, and `interval_efficiency_plot.csv`
 - `results/cancellation_curve.csv`
 - `results/minimax_ambiguity.csv`
 - `results/finite_sample.csv` and `finite_sample_plot.csv`

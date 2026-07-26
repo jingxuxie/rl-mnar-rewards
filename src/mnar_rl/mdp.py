@@ -11,18 +11,27 @@ Array = np.ndarray
 
 @dataclass(frozen=True)
 class TabularMDP:
-    """Finite-horizon MDP with time-indexed transition kernels."""
+    """Finite-horizon MDP with time-indexed transition kernels.
 
-    transition: Array  # (H, S, A, S); final slice may be arbitrary
-    initial: Array  # (S,)
+    Attributes
+    ----------
+    transition:
+        Array with shape ``(H, S, A, S)``. The final time slice is retained for
+        a uniform representation, even though no continuation value follows it.
+    initial:
+        Initial-state distribution with shape ``(S,)``.
+    """
+
+    transition: Array
+    initial: Array
 
     def __post_init__(self) -> None:
         transition = np.asarray(self.transition, dtype=float)
         initial = np.asarray(self.initial, dtype=float)
         if transition.ndim != 4:
             raise ValueError("transition must have shape (H,S,A,S)")
-        _, states, _, next_states = transition.shape
-        if states != next_states or initial.shape != (states,):
+        _, n_states, _, next_states = transition.shape
+        if n_states != next_states or initial.shape != (n_states,):
             raise ValueError("incompatible transition and initial shapes")
         if np.any(transition < -1e-12) or not np.allclose(
             transition.sum(axis=-1), 1.0, atol=1e-9
@@ -45,107 +54,100 @@ class TabularMDP:
 
 
 def validate_policy(mdp: TabularMDP, policy: Array) -> Array:
-    """Validate and return a Markov policy array."""
-    candidate = np.asarray(policy, dtype=float)
-    expected = (mdp.horizon, mdp.n_states, mdp.n_actions)
-    if candidate.shape != expected:
-        raise ValueError(f"policy must have shape {expected}")
-    if np.any(candidate < -1e-12) or not np.allclose(
-        candidate.sum(axis=-1), 1.0, atol=1e-9
+    """Validate and return a Markov policy with shape ``(H,S,A)``."""
+    policy_array = np.asarray(policy, dtype=float)
+    expected_shape = (mdp.horizon, mdp.n_states, mdp.n_actions)
+    if policy_array.shape != expected_shape:
+        raise ValueError(f"policy must have shape {expected_shape}")
+    if np.any(policy_array < -1e-12) or not np.allclose(
+        policy_array.sum(axis=-1), 1.0, atol=1e-9
     ):
         raise ValueError("policy rows must be probability vectors")
-    return candidate
+    return policy_array
 
 
 def policy_occupancy(mdp: TabularMDP, policy: Array) -> Array:
-    """Return ``d_h(s,a)=P(S_h=s,A_h=a)``."""
-    candidate = validate_policy(mdp, policy)
-    occupancy = np.zeros_like(candidate)
-    state_mass = mdp.initial.copy()
-    for h in range(mdp.horizon):
-        occupancy[h] = state_mass[:, None] * candidate[h]
-        if h + 1 < mdp.horizon:
-            state_mass = np.einsum(
-                "sa,san->n",
-                occupancy[h],
-                mdp.transition[h],
+    """Return ``d_h(s,a)=P_pi(S_h=s,A_h=a)``."""
+    policy_array = validate_policy(mdp, policy)
+    occupancy = np.zeros_like(policy_array)
+    state_distribution = np.asarray(mdp.initial, dtype=float).copy()
+    for time in range(mdp.horizon):
+        occupancy[time] = state_distribution[:, None] * policy_array[time]
+        if time + 1 < mdp.horizon:
+            state_distribution = np.einsum(
+                "sa,san->n", occupancy[time], mdp.transition[time]
             )
     return occupancy
 
 
+def policy_from_occupancy(
+    mdp: TabularMDP,
+    occupancy: Array,
+    fallback_policy: Array | None = None,
+) -> Array:
+    """Recover a Markov policy from a feasible occupancy array.
+
+    Actions at unreachable state-time pairs are taken from ``fallback_policy``;
+    a uniform policy is used when no fallback is supplied.
+    """
+    occupancy_array = np.asarray(occupancy, dtype=float)
+    expected_shape = (mdp.horizon, mdp.n_states, mdp.n_actions)
+    if occupancy_array.shape != expected_shape or np.any(occupancy_array < -1e-10):
+        raise ValueError(
+            f"occupancy must have shape {expected_shape} and be nonnegative"
+        )
+    if fallback_policy is None:
+        fallback = np.full(expected_shape, 1.0 / mdp.n_actions)
+    else:
+        fallback = validate_policy(mdp, fallback_policy)
+
+    policy = np.empty(expected_shape)
+    for time in range(mdp.horizon):
+        for state in range(mdp.n_states):
+            mass = float(occupancy_array[time, state].sum())
+            policy[time, state] = (
+                occupancy_array[time, state] / mass
+                if mass > 1e-12
+                else fallback[time, state]
+            )
+    return policy
+
+
 def policy_value(mdp: TabularMDP, reward: Array, policy: Array) -> float:
-    """Evaluate a policy exactly from its occupancy measure."""
+    """Evaluate a policy exactly for an expected reward table."""
     reward_array = np.asarray(reward, dtype=float)
-    expected = (mdp.horizon, mdp.n_states, mdp.n_actions)
-    if reward_array.shape != expected:
-        raise ValueError(f"reward must have shape {expected}")
+    expected_shape = (mdp.horizon, mdp.n_states, mdp.n_actions)
+    if reward_array.shape != expected_shape:
+        raise ValueError(f"reward must have shape {expected_shape}")
     return float(np.sum(policy_occupancy(mdp, policy) * reward_array))
 
 
 def optimal_policy(mdp: TabularMDP, reward: Array) -> tuple[Array, float]:
-    """Return a deterministic optimal policy by backward induction."""
+    """Compute an optimal deterministic policy by backward induction."""
     reward_array = np.asarray(reward, dtype=float)
-    expected = (mdp.horizon, mdp.n_states, mdp.n_actions)
-    if reward_array.shape != expected:
-        raise ValueError(f"reward must have shape {expected}")
+    expected_shape = (mdp.horizon, mdp.n_states, mdp.n_actions)
+    if reward_array.shape != expected_shape:
+        raise ValueError(f"reward must have shape {expected_shape}")
 
-    value_next = np.zeros(mdp.n_states)
-    policy = np.zeros(expected)
-    for h in range(mdp.horizon - 1, -1, -1):
-        continuation = np.einsum("san,n->sa", mdp.transition[h], value_next)
-        action_values = reward_array[h] + continuation
+    next_value = np.zeros(mdp.n_states)
+    policy = np.zeros(expected_shape)
+    for time in range(mdp.horizon - 1, -1, -1):
+        continuation = np.einsum(
+            "san,n->sa", mdp.transition[time], next_value
+        )
+        action_values = reward_array[time] + continuation
         actions = np.argmax(action_values, axis=1)
-        policy[h, np.arange(mdp.n_states), actions] = 1.0
-        value_next = action_values[np.arange(mdp.n_states), actions]
-    return policy, float(mdp.initial @ value_next)
+        policy[time, np.arange(mdp.n_states), actions] = 1.0
+        next_value = action_values[np.arange(mdp.n_states), actions]
+    return policy, float(np.asarray(mdp.initial) @ next_value)
 
 
 def epsilon_soft(policy: Array, epsilon: float) -> Array:
-    """Mix a policy with the uniform policy."""
-    candidate = np.asarray(policy, dtype=float)
+    """Mix a policy with the uniform action distribution."""
+    policy_array = np.asarray(policy, dtype=float)
     if not 0.0 <= epsilon <= 1.0:
         raise ValueError("epsilon must lie in [0,1]")
-    return (1.0 - epsilon) * candidate + epsilon / candidate.shape[-1]
-
-
-def weissman_l1_radius(samples: int, n_states: int, alpha: float) -> float:
-    """Finite-sample L1 radius for one multinomial transition row.
-
-    The radius inverts the Weissman et al. inequality
-
-    ``P(||P_hat-P||_1 >= eps) <= (2**S-2) exp(-N eps**2/2)``
-
-    and is clipped at the largest possible L1 distance, two.
-    """
-    if samples < 0:
-        raise ValueError("samples must be nonnegative")
-    if n_states < 1:
-        raise ValueError("n_states must be positive")
-    if not 0.0 < alpha < 1.0:
-        raise ValueError("alpha must lie in (0,1)")
-    if n_states == 1:
-        return 0.0
-    if samples == 0:
-        return 2.0
-    multiplicity = float(2**n_states - 2)
-    radius = np.sqrt(2.0 * np.log(multiplicity / alpha) / samples)
-    return float(min(2.0, radius))
-
-
-def transition_improvement_penalty(radii_by_time: Array) -> float:
-    """Uniform baseline-relative penalty for estimated transitions.
-
-    ``radii_by_time[h]`` bounds the largest transition-row L1 error at
-    zero-indexed decision time ``h``. For an H-step problem there are H-1
-    consequential transition layers, and the improvement penalty is
-
-    ``sum_{h=0}^{H-2} (H-h-1) * eta_h``.
-    """
-    radii = np.asarray(radii_by_time, dtype=float)
-    if radii.ndim != 1 or np.any(~np.isfinite(radii)) or np.any(radii < 0.0):
-        raise ValueError("radii_by_time must be a finite nonnegative vector")
-    coefficients = np.arange(radii.size, 0, -1, dtype=float)
-    return float(coefficients @ radii)
+    return (1.0 - epsilon) * policy_array + epsilon / policy_array.shape[-1]
 
 
 def random_mdp(
@@ -155,8 +157,8 @@ def random_mdp(
     n_actions: int,
     concentration: float = 0.7,
 ) -> TabularMDP:
-    """Generate a small random tabular MDP for controlled validations."""
-    if horizon < 1 or n_states < 1 or n_actions < 1 or concentration <= 0.0:
+    """Generate a random tabular MDP with Dirichlet transition rows."""
+    if horizon < 1 or n_states < 1 or n_actions < 1 or concentration <= 0:
         raise ValueError("invalid random MDP dimensions")
     transition = rng.dirichlet(
         np.full(n_states, concentration),

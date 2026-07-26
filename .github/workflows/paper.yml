@@ -1,0 +1,70 @@
+name: Paper
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - agent/**
+
+permissions:
+  contents: read
+
+jobs:
+  build-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install TeX and PDF tools
+        run: |
+          sudo apt-get update -qq >/tmp/apt-update.log 2>&1
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            texlive-latex-base texlive-latex-extra texlive-plain-generic \
+            texlive-fonts-recommended texlive-fonts-extra \
+            texlive-science poppler-utils unzip >/tmp/apt-install.log 2>&1
+      - name: Download official AAAI-27 author kit
+        run: |
+          curl -fsSL https://aaai.org/authorkit27/ -o /tmp/AuthorKit27.zip
+          unzip -q /tmp/AuthorKit27.zip -d /tmp/AuthorKit27
+          find /tmp/AuthorKit27 -name aaai2027.sty -exec cp {} paper/ \;
+          find /tmp/AuthorKit27 -name aaai2027.bst -exec cp {} paper/ \;
+          test -f paper/aaai2027.sty
+          test -f paper/aaai2027.bst
+      - name: Build anonymous review artifacts
+        shell: bash
+        run: |
+          set +e
+          cd paper
+          AAAI_MODE=review bash build.sh
+          status=$?
+          if [[ $status -ne 0 ]]; then
+            echo '===== main.blg tail ====='
+            tail -n 120 main.blg 2>/dev/null || true
+            echo '===== supplement.blg tail ====='
+            tail -n 120 supplement.blg 2>/dev/null || true
+            echo '===== main.log tail ====='
+            tail -n 120 main.log 2>/dev/null || true
+            echo '===== supplement.log tail ====='
+            tail -n 120 supplement.log 2>/dev/null || true
+            echo '===== checklist log tail ====='
+            tail -n 80 ReproducibilityChecklist.log 2>/dev/null || true
+            exit $status
+          fi
+      - name: Check page allocation, page size, and fonts
+        run: python scripts/check_submission.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aaai-review-artifacts
+          if-no-files-found: warn
+          path: |
+            paper/main.pdf
+            paper/supplement.pdf
+            paper/ReproducibilityChecklist.pdf
+            paper/main.log
+            paper/main.blg
+            paper/main.aux
+            paper/supplement.log
+            paper/supplement.blg
+            paper/ReproducibilityChecklist.log

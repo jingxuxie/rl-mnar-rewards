@@ -13,13 +13,13 @@
 
 ## AAAI packaging
 
-- [x] Official-author-kit build performed in GitHub Actions.
-- [x] Anonymous review-mode manuscript.
+- [ ] Official-author-kit build configured; confirm the current branch artifact after the final push.
+- [x] Anonymous review-mode source and local development-layout manuscript.
 - [x] Non-reference content labeled and automatically checked to end no later than page 7.
 - [x] Main PDF automatically checked to have at most 9 pages.
-- [x] US-letter page size and embedded fonts checked.
+- [x] Local PDFs checked for US-letter page size and embedded fonts; repeat on the official-kit CI artifact.
 - [x] Supplement compiled separately.
-- [x] Official reproducibility checklist filled and compiled separately.
+- [x] Official reproducibility checklist filled; compile it separately in the final author-kit CI run.
 - [x] Undefined references/citations fail the build.
 
 ## Claims deliberately not made
