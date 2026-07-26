@@ -1,6 +1,6 @@
-n,robust_power,robust_false_deployment,plugin_false_deployment
-100,0.012,0.0,0.828
-300,0.332,0.0,0.972
-1000,0.994,0.0,1.0
-3000,1.0,0.0,1.0
-10000,1.0,0.0,1.0
+n,robust_power,robust_power_se,robust_false_deployment,robust_false_deployment_se,plugin_false_deployment,plugin_false_deployment_se
+100,0.02,0.004427188724235731,0.0,0.0,0.826,0.011988494484296184
+300,0.391,0.015431104950715617,0.0,0.0,0.97,0.0053944415837044735
+1000,0.997,0.0017294507798720387,0.0,0.0,1.0,0.0
+3000,1.0,0.0,0.0,0.0,1.0,0.0
+10000,1.0,0.0,0.0,0.0,1.0,0.0
