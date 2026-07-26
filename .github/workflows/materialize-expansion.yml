@@ -1,0 +1,45 @@
+name: Materialize AAAI paper expansion
+
+on:
+  push:
+    branches:
+      - agent/expand-aaai-paper
+    paths:
+      - expansion_bundle.ready
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/expand-aaai-paper
+          fetch-depth: 0
+      - name: Verify and unpack revision
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f expansion_bundle.ready
+          shopt -s nullglob
+          parts=(expansion_bundle.b64.part*)
+          test ${#parts[@]} -gt 0
+          cat "${parts[@]}" | base64 --decode > /tmp/mnar-expansion.tar.xz
+          expected="$(tr -d '[:space:]' < expansion_bundle.ready)"
+          actual="$(sha256sum /tmp/mnar-expansion.tar.xz | cut -d' ' -f1)"
+          test "$actual" = "$expected"
+          mkdir -p /tmp/mnar-expansion
+          tar -xJf /tmp/mnar-expansion.tar.xz -C /tmp/mnar-expansion
+          cp -a /tmp/mnar-expansion/. .
+          rm -f expansion_bundle.b64.part* expansion_bundle.ready
+      - name: Commit readable source tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Expand theory, experiments, and related work"
+          git push origin HEAD:agent/expand-aaai-paper
