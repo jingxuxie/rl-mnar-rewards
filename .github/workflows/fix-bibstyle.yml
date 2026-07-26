@@ -1,17 +1,20 @@
 name: Fix AAAI bibliography style selection
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/expand-aaai-paper
-    paths:
-      - fix_bibstyle.ready
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   fix:
+    if: ${{ github.head_ref == 'agent/expand-aaai-paper' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +25,10 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          if [[ ! -f fix_bibstyle.ready ]]; then
+            echo "Bibliography block already repaired; nothing to do."
+            exit 0
+          fi
           python - <<'PY'
           from pathlib import Path
           old = r'\IfFileExists{aaai2027.bst}{\bibliographystyle{aaai2027}}{\bibliographystyle{plainnat}}' + '\n' + r'\bibliography{references}'
