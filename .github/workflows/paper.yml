@@ -39,6 +39,10 @@ jobs:
           AAAI_MODE=review bash build.sh
           status=$?
           if [[ $status -ne 0 ]]; then
+            echo '===== main.blg tail ====='
+            tail -n 120 main.blg 2>/dev/null || true
+            echo '===== supplement.blg tail ====='
+            tail -n 120 supplement.blg 2>/dev/null || true
             echo '===== main.log tail ====='
             tail -n 120 main.log 2>/dev/null || true
             echo '===== supplement.log tail ====='
@@ -59,6 +63,8 @@ jobs:
             paper/supplement.pdf
             paper/ReproducibilityChecklist.pdf
             paper/main.log
-            paper/supplement.log
-            paper/ReproducibilityChecklist.log
+            paper/main.blg
             paper/main.aux
+            paper/supplement.log
+            paper/supplement.blg
+            paper/ReproducibilityChecklist.log
