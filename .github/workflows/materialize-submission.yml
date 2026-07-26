@@ -1,0 +1,37 @@
+name: Materialize submission candidate
+
+on:
+  push:
+    branches:
+      - agent/mnar-submission-ready
+    paths:
+      - submission_bundle.ready
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Unpack frozen submission tree
+        shell: bash
+        run: |
+          test -f submission_bundle.b64
+          base64 --decode submission_bundle.b64 > /tmp/submission.tar.xz
+          mkdir -p /tmp/submission
+          tar -xJf /tmp/submission.tar.xz -C /tmp/submission
+          cp -a /tmp/submission/. .
+          rm -f submission_bundle.b64 submission_bundle.ready
+          rm -f .github/workflows/materialize-submission.yml
+          rm -f results/baseline_quality.csv results/finite_sample.csv
+          rm -f results/gamma_misspecification.csv results/post_selection.csv
+          rm -f results/random_mdp.csv results/transition_uncertainty.csv
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize proofs, experiments, and AAAI submission package"
+          git push origin HEAD:agent/mnar-submission-ready
