@@ -6,16 +6,25 @@ on:
       - agent/mnar-submission-ready
     paths:
       - submission_bundle.ready
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   materialize:
+    if: ${{ github.head_ref == 'agent/mnar-submission-ready' || github.ref_name == 'agent/mnar-submission-ready' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: agent/mnar-submission-ready
           fetch-depth: 0
       - name: Unpack frozen submission tree
         shell: bash
@@ -23,6 +32,7 @@ jobs:
           shopt -s nullglob
           parts=(submission_bundle.b64.part*)
           test ${#parts[@]} -gt 0
+          test -f submission_bundle.ready
           cat "${parts[@]}" | base64 --decode > /tmp/submission.tar.xz
           expected="$(tr -d '[:space:]' < submission_bundle.ready)"
           printf '%s  %s\n' "$expected" /tmp/submission.tar.xz | sha256sum -c -
