@@ -1,16 +1,18 @@
-.PHONY: test experiments paper all clean
+.PHONY: test experiments paper submission-check clean
 
 test:
 	pytest
 
 experiments:
-	PYTHONPATH=src python experiments/run_all.py
+	python experiments/run_all.py --random-mdps 200 --replicates 1000 --post-selection-replicates 3000 --gamma-mdps 100
 
 paper:
 	cd paper && bash build.sh
 
-all: test experiments paper
+submission-check:
+	cd paper && AAAI_MODE=review bash build.sh
+	python scripts/check_submission.py
 
 clean:
-	rm -rf .pytest_cache src/*.egg-info src/mnar_rl/__pycache__ tests/__pycache__
-	cd paper && latexmk -C main.tex
+	rm -rf .pytest_cache src/mnar_rl/__pycache__ tests/__pycache__ experiments/__pycache__
+	rm -f paper/*.aux paper/*.bbl paper/*.blg paper/*.log paper/*.out paper/*.pdf

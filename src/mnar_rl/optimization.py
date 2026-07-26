@@ -9,7 +9,6 @@ from scipy.optimize import linprog
 
 from .mdp import TabularMDP, optimal_policy, policy_occupancy, policy_value, validate_policy
 
-
 Array = np.ndarray
 
 
@@ -21,6 +20,32 @@ class RobustImprovementResult:
     solver_status: str
 
 
+def sharp_improvement_interval(
+    candidate_occupancy: Array,
+    baseline_occupancy: Array,
+    reward_lower: Array,
+    reward_upper: Array,
+) -> tuple[float, float]:
+    """Sharp identified interval for ``V(candidate)-V(baseline)``."""
+    d = np.asarray(candidate_occupancy, dtype=float)
+    baseline = np.asarray(baseline_occupancy, dtype=float)
+    lower = np.asarray(reward_lower, dtype=float)
+    upper = np.asarray(reward_upper, dtype=float)
+    if not (d.shape == baseline.shape == lower.shape == upper.shape):
+        raise ValueError("all arrays must have identical shapes")
+    if np.any(lower > upper + 1e-12):
+        raise ValueError("reward lower endpoint exceeds upper endpoint")
+
+    contrast = d - baseline
+    identified_lower = float(
+        np.sum(np.where(contrast >= 0.0, contrast * lower, contrast * upper))
+    )
+    identified_upper = float(
+        np.sum(np.where(contrast >= 0.0, contrast * upper, contrast * lower))
+    )
+    return identified_lower, identified_upper
+
+
 def sharp_improvement_lower_bound(
     candidate_occupancy: Array,
     baseline_occupancy: Array,
@@ -28,16 +53,28 @@ def sharp_improvement_lower_bound(
     reward_upper: Array,
 ) -> float:
     """Exact worst-case value difference over rectangular reward intervals."""
+    return sharp_improvement_interval(
+        candidate_occupancy,
+        baseline_occupancy,
+        reward_lower,
+        reward_upper,
+    )[0]
+
+
+def cancellation_gain(
+    candidate_occupancy: Array,
+    baseline_occupancy: Array,
+    reward_lower: Array,
+    reward_upper: Array,
+) -> float:
+    """Exact gain of direct comparison over subtracting separate value bounds."""
     d = np.asarray(candidate_occupancy, dtype=float)
-    db = np.asarray(baseline_occupancy, dtype=float)
-    lo = np.asarray(reward_lower, dtype=float)
-    hi = np.asarray(reward_upper, dtype=float)
-    if not (d.shape == db.shape == lo.shape == hi.shape):
+    baseline = np.asarray(baseline_occupancy, dtype=float)
+    lower = np.asarray(reward_lower, dtype=float)
+    upper = np.asarray(reward_upper, dtype=float)
+    if not (d.shape == baseline.shape == lower.shape == upper.shape):
         raise ValueError("all arrays must have identical shapes")
-    if np.any(lo > hi + 1e-12):
-        raise ValueError("reward lower endpoint exceeds upper endpoint")
-    contrast = d - db
-    return float(np.sum(np.where(contrast >= 0.0, contrast * lo, contrast * hi)))
+    return float(np.sum(np.minimum(d, baseline) * (upper - lower)))
 
 
 def separate_value_lower_bound(
@@ -47,12 +84,19 @@ def separate_value_lower_bound(
     reward_lower: Array,
     reward_upper: Array,
 ) -> float:
-    """Conservative difference obtained from two separate value bounds."""
-    return policy_value(mdp, reward_lower, candidate_policy) - policy_value(mdp, reward_upper, baseline_policy)
+    """Difference obtained by separately robustifying the two policy values."""
+    return policy_value(mdp, reward_lower, candidate_policy) - policy_value(
+        mdp,
+        reward_upper,
+        baseline_policy,
+    )
 
 
-def robust_absolute_policy(mdp: TabularMDP, reward_lower: Array) -> tuple[Array, float]:
-    """Maximize worst-case absolute value for rectangular reward intervals."""
+def robust_absolute_policy(
+    mdp: TabularMDP,
+    reward_lower: Array,
+) -> tuple[Array, float]:
+    """Maximize worst-case absolute value under rectangular reward intervals."""
     return optimal_policy(mdp, reward_lower)
 
 
@@ -62,91 +106,95 @@ def optimize_robust_improvement(
     reward_lower: Array,
     reward_upper: Array,
 ) -> RobustImprovementResult:
-    """Solve max_pi min_r V_r(pi)-V_r(pi_b) as a linear program.
-
-    The LP uses occupancy variables d and hypograph variables t satisfying
-    t_x <= (d_x-d_b,x) * lower_x and
-    t_x <= (d_x-d_b,x) * upper_x.
-    """
-    baseline = validate_policy(mdp, baseline_policy)
-    lo = np.asarray(reward_lower, dtype=float)
-    hi = np.asarray(reward_upper, dtype=float)
+    """Solve ``max_pi min_r V_r(pi)-V_r(pi_b)`` by occupancy-measure LP."""
+    baseline_policy = validate_policy(mdp, baseline_policy)
+    lower = np.asarray(reward_lower, dtype=float)
+    upper = np.asarray(reward_upper, dtype=float)
     shape = (mdp.horizon, mdp.n_states, mdp.n_actions)
-    if lo.shape != shape or hi.shape != shape:
+    if lower.shape != shape or upper.shape != shape:
         raise ValueError(f"reward arrays must have shape {shape}")
-    if np.any(lo > hi + 1e-12):
+    if np.any(lower > upper + 1e-12):
         raise ValueError("reward lower endpoint exceeds upper endpoint")
 
-    db = policy_occupancy(mdp, baseline)
-    n_cells = int(np.prod(shape))
-    n_vars = 2 * n_cells
-    d_offset = 0
-    t_offset = n_cells
+    baseline_occupancy = policy_occupancy(mdp, baseline_policy)
+    cells = int(np.prod(shape))
+    variables = 2 * cells
+    t_offset = cells
 
-    objective = np.zeros(n_vars)
+    objective = np.zeros(variables)
     objective[t_offset:] = -1.0
 
-    # Flow equalities: one per (h,s).
-    rows: list[Array] = []
-    rhs: list[float] = []
+    equality_rows: list[Array] = []
+    equality_rhs: list[float] = []
     for h in range(mdp.horizon):
-        for s in range(mdp.n_states):
-            row = np.zeros(n_vars)
-            for a in range(mdp.n_actions):
-                idx = np.ravel_multi_index((h, s, a), shape)
-                row[d_offset + idx] = 1.0
+        for state in range(mdp.n_states):
+            row = np.zeros(variables)
+            for action in range(mdp.n_actions):
+                index = np.ravel_multi_index((h, state, action), shape)
+                row[index] = 1.0
             if h == 0:
-                target = float(mdp.initial[s])
+                target = float(mdp.initial[state])
             else:
                 target = 0.0
-                for sp in range(mdp.n_states):
-                    for ap in range(mdp.n_actions):
-                        prev_idx = np.ravel_multi_index((h - 1, sp, ap), shape)
-                        row[d_offset + prev_idx] -= mdp.transition[h - 1, sp, ap, s]
-            rows.append(row)
-            rhs.append(target)
+                for previous_state in range(mdp.n_states):
+                    for previous_action in range(mdp.n_actions):
+                        index = np.ravel_multi_index(
+                            (h - 1, previous_state, previous_action),
+                            shape,
+                        )
+                        row[index] -= mdp.transition[
+                            h - 1,
+                            previous_state,
+                            previous_action,
+                            state,
+                        ]
+            equality_rows.append(row)
+            equality_rhs.append(target)
 
-    # Hypograph inequalities.
-    a_ub: list[Array] = []
-    b_ub: list[float] = []
-    lo_flat = lo.ravel()
-    hi_flat = hi.ravel()
-    db_flat = db.ravel()
-    for i in range(n_cells):
-        row = np.zeros(n_vars)
-        row[t_offset + i] = 1.0
-        row[d_offset + i] = -lo_flat[i]
-        a_ub.append(row)
-        b_ub.append(-lo_flat[i] * db_flat[i])
+    inequality_rows: list[Array] = []
+    inequality_rhs: list[float] = []
+    lower_flat = lower.ravel()
+    upper_flat = upper.ravel()
+    baseline_flat = baseline_occupancy.ravel()
+    for index in range(cells):
+        row = np.zeros(variables)
+        row[t_offset + index] = 1.0
+        row[index] = -lower_flat[index]
+        inequality_rows.append(row)
+        inequality_rhs.append(-lower_flat[index] * baseline_flat[index])
 
-        row = np.zeros(n_vars)
-        row[t_offset + i] = 1.0
-        row[d_offset + i] = -hi_flat[i]
-        a_ub.append(row)
-        b_ub.append(-hi_flat[i] * db_flat[i])
+        row = np.zeros(variables)
+        row[t_offset + index] = 1.0
+        row[index] = -upper_flat[index]
+        inequality_rows.append(row)
+        inequality_rhs.append(-upper_flat[index] * baseline_flat[index])
 
-    bounds = [(0.0, None)] * n_cells + [(None, None)] * n_cells
     result = linprog(
         objective,
-        A_ub=np.vstack(a_ub),
-        b_ub=np.asarray(b_ub),
-        A_eq=np.vstack(rows),
-        b_eq=np.asarray(rhs),
-        bounds=bounds,
+        A_ub=np.vstack(inequality_rows),
+        b_ub=np.asarray(inequality_rhs),
+        A_eq=np.vstack(equality_rows),
+        b_eq=np.asarray(equality_rhs),
+        bounds=[(0.0, None)] * cells + [(None, None)] * cells,
         method="highs",
     )
     if not result.success:
         raise RuntimeError(f"robust-improvement LP failed: {result.message}")
 
-    occupancy = result.x[:n_cells].reshape(shape)
+    occupancy = result.x[:cells].reshape(shape)
     policy = np.empty(shape)
     for h in range(mdp.horizon):
-        for s in range(mdp.n_states):
-            mass = float(occupancy[h, s].sum())
+        for state in range(mdp.n_states):
+            mass = float(occupancy[h, state].sum())
             if mass > 1e-10:
-                policy[h, s] = occupancy[h, s] / mass
+                policy[h, state] = occupancy[h, state] / mass
             else:
-                policy[h, s] = baseline[h, s]
+                policy[h, state] = baseline_policy[h, state]
 
-    certificate = sharp_improvement_lower_bound(occupancy, db, lo, hi)
+    certificate = sharp_improvement_lower_bound(
+        occupancy,
+        baseline_occupancy,
+        lower,
+        upper,
+    )
     return RobustImprovementResult(policy, occupancy, certificate, result.message)

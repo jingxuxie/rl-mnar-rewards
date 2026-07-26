@@ -1,0 +1,384 @@
+\documentclass[letterpaper]{article}
+\newif\ifofficialaaai
+\IfFileExists{aaai2027.sty}{%
+  \officialaaaitrue
+  \ifdefined\AAAIReview
+    \usepackage[submission]{aaai2027}% anonymous review build
+  \else
+    \usepackage[preprint]{aaai2027}% public development build
+  \fi
+}{%
+  \officialaaaifalse
+  \usepackage[letterpaper,margin=0.72in]{geometry}
+  \usepackage{newtxtext}
+  \usepackage{microtype}
+  \setlength{\columnsep}{0.23in}
+  \AtBeginDocument{\twocolumn}
+}
+\usepackage[hyphens]{url}
+\usepackage{graphicx}
+\urlstyle{rm}
+\def\UrlFont{\rm}
+\usepackage{natbib}
+\usepackage{caption}
+\frenchspacing
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\pdfinfo{/TemplateVersion (2027.1)}
+\providecommand{\affiliations}[1]{}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{lemma}[theorem]{Lemma}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prb}{\mathbb{P}}
+\newcommand{\cS}{\mathcal{S}}
+\newcommand{\cA}{\mathcal{A}}
+\newcommand{\cR}{\mathcal{R}}
+\newcommand{\cD}{\mathcal{D}}
+\newcommand{\pos}[1]{[#1]_{+}}
+\newcommand{\negp}[1]{[#1]_{-}}
+\newcommand{\odds}{\operatorname{odds}}
+
+\title{Supplementary Material:\\Sharp Partial Identification and Safe Offline Policy Improvement\\with Rewards Missing Not at Random}
+\author{Anonymous Submission}
+\affiliations{}
+
+\begin{document}
+\maketitle
+
+\section{Proofs}
+Throughout, a base-model cell is $x=(h,s,a)$, with
+\begin{align*}
+q&=\Prb(M=1\mid x),\\
+p&=\Prb(R=1\mid M=1,x),\\
+\nu&=\Prb(R=1\mid M=0,x).
+\end{align*}
+The base model assumes $(R,M)\perp S'\mid(S,A)$. For transition-conditioned rewards, use $x=(h,s,a,s')$ and occupancy coefficient $d_h^\pi(s,a)P_h(s'\mid s,a)$; every argument remains linear and unchanged in form. Unsupported cells receive $[0,1]$. We use
+\[
+L_\Gamma(p)=\frac{p}{p+\Gamma(1-p)},\qquad
+U_\Gamma(p)=\frac{\Gamma p}{1-p+\Gamma p}.
+\]
+
+\subsection{Nonidentification}
+\begin{proof}[Proof of nonidentification]
+Take one state, two actions, and horizon one. The behavior policy selects both actions with positive probability. For each action let
+\begin{align*}
+\Prb(M=1\mid A=a)&=\tfrac12,\\
+\Prb(R=1\mid M=1,A=a)&=\tfrac12.
+\end{align*}
+These quantities determine the observed law of $(A,M,MR)$. In model $\mathsf M_1$, set
+$\Prb(R=1\mid M=0,A=0)=1$ and
+$\Prb(R=1\mid M=0,A=1)=0$.
+The two action rewards are then $(3/4,1/4)$. In model $\mathsf M_2$, swap the two missing-case probabilities, producing rewards $(1/4,3/4)$. The observed law is identical but the optimal action reverses. Therefore neither policy values nor the optimal policy are identified. The construction embeds into any horizon by making all later rewards zero and transitions action independent.
+\end{proof}
+
+\subsection{Sharp cellwise reward bounds}
+\begin{proof}[Proof of the sharp cellwise-bound theorem]
+Suppress the context. The conditional joint table is
+\begin{align*}
+\Prb(M=1,R=1)&=qp,\\
+\Prb(M=1,R=0)&=q(1-p),\\
+\Prb(M=0,R=1)&=(1-q)\nu,\\
+\Prb(M=0,R=0)&=(1-q)(1-\nu).
+\end{align*}
+For interior probabilities, Bayes' rule gives
+\begin{align*}
+\frac{\odds(M=1\mid R=1)}{\odds(M=1\mid R=0)}
+&=\frac{qp/\{(1-q)\nu\}}{q(1-p)/\{(1-q)(1-\nu)\}}\\
+&=\frac{p(1-\nu)}{(1-p)\nu}
+=\frac{\odds(p)}{\odds(\nu)}.
+\end{align*}
+Thus the sensitivity restriction is equivalent to
+\[
+\frac{\odds(p)}{\Gamma}\leq\odds(\nu)\leq\Gamma\odds(p).
+\]
+Applying the increasing inverse-odds map $z\mapsto z/(1+z)$ yields
+$\nu\in[L_\Gamma(p),U_\Gamma(p)]$. Since
+$r=qp+(1-q)\nu$ is increasing in $\nu$, the stated reward endpoints follow.
+
+For sharpness, select any $\nu$ in the displayed interval and define the four probabilities above. They are nonnegative, sum to one, reproduce the same $(q,p)$, and have recording odds ratio in $[1/\Gamma,\Gamma]$. The induced mean is $qp+(1-q)\nu$. Continuity handles boundary probabilities. Hence every point in the interval is attainable.
+\end{proof}
+
+\subsection{Finite reward alphabets}
+Suppose $R\in\{z_1,\ldots,z_K\}$, with
+$p_k=\Prb(R=z_k\mid M=1,x)$ and
+$v_k=\Prb(R=z_k\mid M=0,x)$. For categories $k,j$,
+\[
+\frac{\odds(M=1\mid R=z_k)}{\odds(M=1\mid R=z_j)}
+=\frac{p_kv_j}{p_jv_k}.
+\]
+Pairwise $\Gamma$ bounds are therefore equivalent to
+\[
+p_kv_j\leq\Gamma p_jv_k,
+\qquad p_jv_k\leq\Gamma p_kv_j,
+\]
+which are linear in $v$. Together with $v\geq0$ and $\sum_kv_k=1$, they define a polytope. The full reward mean
+$q\sum_kp_kz_k+(1-q)\sum_kv_kz_k$
+is linear, so its exact endpoints are two LP optima. Every feasible $v$ constructs a compatible joint distribution, proving sharpness. For $K=2$ the LP reduces to the binary formulas.
+
+\subsection{Policy values and contrastive bounds}
+For fixed $P$ and $\pi$, the occupancy does not depend on the reward law and
+$V_r^\pi=\sum_xd_x^\pi r_x$. All coefficients are nonnegative, so over the rectangular set $\prod_x[\ell_x,u_x]$, the exact extrema select every lower or upper endpoint. This proves the fixed-policy interval.
+
+\begin{proof}[Proof of Theorem 2]
+Let $c_x=d_x^\pi-d_x^{\pi_b}$. Rectangularity gives
+\[
+\inf_{r\in\cR_\Gamma}\sum_xc_xr_x
+=\sum_x\inf_{r_x\in[\ell_x,u_x]}c_xr_x.
+\]
+The scalar infimum is $c_x\ell_x$ for $c_x\geq0$ and $c_xu_x$ for $c_x<0$, which is the sharp contrastive formula. Cellwise sharpness and rectangularity imply joint attainability.
+
+For the cancellation identity, compare one cell with the separately robust term
+$d_x^\pi\ell_x-d_x^{\pi_b}u_x$. If $c_x\geq0$, the difference is
+$d_x^{\pi_b}(u_x-\ell_x)$. If $c_x<0$, it is
+$d_x^\pi(u_x-\ell_x)$. In either case it equals
+$\min\{d_x^\pi,d_x^{\pi_b}\}w_x$. Summing proves the identity.
+
+Finally, compactness of the rectangle implies the infimum is attained. Therefore the lower endpoint is positive if and only if every compatible reward vector gives strict improvement; if it is nonpositive, an attaining compatible vector witnesses failure of strict improvement.
+\end{proof}
+
+\subsection{Occupancy-measure optimization}
+\begin{proof}[Proof of Theorem 3]
+The finite-horizon occupancy polytope consists exactly of nonnegative arrays satisfying
+\begin{align*}
+\sum_ad_1(s,a)&=\mu(s),\\
+\sum_ad_{h+1}(s,a)&=\sum_{s',a'}d_h(s',a')P_h(s\mid s',a').
+\end{align*}
+Every randomized Markov policy induces such an occupancy, and every feasible occupancy induces a policy through
+$\pi_h(a\mid s)=d_h(s,a)/\sum_{a'}d_h(s,a')$ on reachable states.
+
+For fixed $d$, the sharp objective is
+\[
+\sum_x\min\{(d_x-d_x^b)\ell_x,(d_x-d_x^b)u_x\}.
+\]
+The hypograph of each minimum is represented by
+$t_x\leq(d_x-d_x^b)\ell_x$ and
+$t_x\leq(d_x-d_x^b)u_x$. Maximizing $\sum_xt_x$ makes each $t_x$ equal the smaller affine expression, proving equivalence. Setting $d=d^b$ and $t=0$ establishes a nonnegative optimum.
+\end{proof}
+
+\subsection{Monotonicity in the sensitivity parameter}
+For fixed $p$, $L_\Gamma(p)$ is nonincreasing and $U_\Gamma(p)$ nondecreasing in $\Gamma$. Hence $\ell_x$ decreases and $u_x$ increases. Every positive occupancy contrast is multiplied by a decreasing lower endpoint and every negative contrast by an increasing upper endpoint, so $J_\Gamma(\pi;\pi_b)$ is nonincreasing. This justifies bisection for the critical $\Gamma^\star$.
+
+\subsection{Exact ambiguity--regret tradeoff}
+\begin{proof}[Proof of the exact ambiguity--regret theorem]
+Let $[L,U]$, with $L<0<U$, be the sharp candidate--baseline improvement interval. Sharpness supplies two full-data models $\mathsf M_L$ and $\mathsf M_U$ that share the observed law and attain improvements $L$ and $U$. Any randomized rule choosing between candidate and baseline therefore uses the same candidate probability $\alpha$ under both, even with infinite data.
+
+Under $\mathsf M_L$, the baseline is better by $-L$, and expected simple regret is $\alpha(-L)$. Under $\mathsf M_U$, the candidate is better by $U$, and regret is $(1-\alpha)U$. Hence the worst-case regret is exactly
+\[
+\max\{\alpha(-L),(1-\alpha)U\}.
+\]
+Equalizing the two terms gives
+\[
+\alpha^\star=\frac{U}{U-L},
+\qquad
+\mathfrak R^\star=\frac{(-L)U}{U-L}.
+\]
+For deterministic selectors $\alpha\in\{0,1\}$, the smaller worst-case regret is $\min\{-L,U\}$. If $L\geq0$ or $U\leq0$, one policy weakly dominates and the minimax regret is zero.
+
+For the safety statement, under $\mathsf M_L$ the selected policy is worse than the baseline exactly when the candidate is selected. A guarantee
+$\Prb_{\mathsf M_L}\{V^{\widehat\pi}\geq V^{\pi_b}\}\geq1-\delta$
+therefore requires $\alpha\leq\delta$. The one-step construction embeds into any horizon by making all later rewards action independent. For a symmetric interval $[-W/2,W/2]$, substitution gives randomized and deterministic regrets $W/4$ and $W/2$. At $p=1/2$, the binary cellwise interval is symmetric around $1/2$ and has width $(1-q)(\Gamma-1)/(\Gamma+1)$.
+\end{proof}
+
+\subsection{Uniform confidence and post-selection safety}
+Let $D=H|\cS||\cA|$. Conditional on visit counts,
+\[
+O_x\sim\mathrm{Binomial}(N_x,q_x),\qquad
+Y_x\mid O_x\sim\mathrm{Binomial}(O_x,p_x).
+\]
+For each cell, use tail probability $\delta/(3D)$ for the three one-sided Clopper--Pearson statements
+\[
+q_x\geq q_x^L,\qquad p_x\geq p_x^L,\qquad p_x\leq p_x^U.
+\]
+If $O_x=0$, set $p_x^L=0$ and $p_x^U=1$.
+
+\begin{proof}[Uniform safety]
+Conditional exact coverage and a union bound give all $3D$ inequalities simultaneously with probability at least $1-\delta$. Define
+\[
+\ell(q,p)=qp+(1-q)L_\Gamma(p),\qquad
+u(q,p)=qp+(1-q)U_\Gamma(p).
+\]
+The lower endpoint is increasing in both arguments; the upper is decreasing in $q$ and increasing in $p$. Hence, on the nuisance-coverage event,
+\begin{align*}
+\widehat\ell_x&=\ell(q_x^L,p_x^L)\leq\ell(q_x,p_x),\\
+u(q_x,p_x)&\leq u(q_x^L,p_x^U)=\widehat u_x.
+\end{align*}
+(The leftmost symbol in the second display is the function $u$, not the missing-case probability.) Thus the population ambiguity rectangle is contained in the empirical rectangle. Taking an infimum over the larger set gives
+$\widehat J_\Gamma(\pi)\leq J_\Gamma(\pi)$ simultaneously for every policy, including policies selected after seeing this same set.
+
+The empirical LP has objective at least zero because the baseline is feasible. If the optimum is positive, the selected policy has positive true improvement on the coverage event; otherwise the algorithm returns the baseline. This proves the $1-\delta$ guarantee.
+\end{proof}
+
+\paragraph{Notation clarification.}
+To avoid the overloaded symbol in the preceding proof, throughout the implementation the upper reward endpoint is named \texttt{reward\_upper}; the missing-case probability is named $\nu$. The inequality is $u(q_x,p_x)\leq\widehat u_x$.
+
+\subsection{Robust-objective regret and an explicit rate}
+Let
+\[
+\rho=\max_x\max\{\ell_x-\widehat\ell_x,\widehat u_x-u_x\}.
+\]
+For every policy,
+\begin{align*}
+0\leq J_\Gamma(\pi)-\widehat J_\Gamma(\pi)
+&\leq\rho\sum_x|d_x^\pi-d_x^{\pi_b}|\\
+&\leq2H\rho,
+\end{align*}
+because each time-indexed occupancy is a probability distribution. Let $\pi^\star$ and $\widehat\pi$ maximize the population and empirical objectives. Then
+\begin{align*}
+J_\Gamma(\pi^\star)-J_\Gamma(\widehat\pi)
+&\leq J_\Gamma(\pi^\star)-\widehat J_\Gamma(\pi^\star)\\
+&\leq2H\rho,
+\end{align*}
+where empirical optimality and $J_\Gamma(\widehat\pi)\geq\widehat J_\Gamma(\widehat\pi)$ were used.
+
+For the explicit rate, note that
+\[
+L_\Gamma'(p)=\frac{\Gamma}{[\Gamma-(\Gamma-1)p]^2},
+\quad
+U_\Gamma'(p)=\frac{\Gamma}{[1+(\Gamma-1)p]^2},
+\]
+so both maps are $\Gamma$-Lipschitz. Reward endpoints are one-Lipschitz in $q$ and $\Gamma$-Lipschitz in $p$.
+
+Let $\widehat q_x=O_x/N_x$ and $\widehat p_x=Y_x/O_x$. Define clipped Hoeffding limits
+\begin{align*}
+q_x^L&=(\widehat q_x-e_{q,x})_+,\\
+p_x^L&=(\widehat p_x-e_{p,x})_+,\\
+p_x^U&=\min\{1,\widehat p_x+e_{p,x}\}.
+\end{align*}
+with
+\[
+e_{q,x}=\sqrt{\frac{\log(4D/\delta)}{2N_x}},
+\qquad
+e_{p,x}=\sqrt{\frac{\log(4D/\delta)}{2O_x}}.
+\]
+A union bound over two-sided Hoeffding events for the $2D$ nuisance parameters gives probability at least $1-\delta$. On this event,
+$q_x-q_x^L\leq2e_{q,x}$,
+$p_x-p_x^L\leq2e_{p,x}$, and
+$p_x^U-p_x\leq2e_{p,x}$. Therefore
+\[
+\rho\leq2\max_x\{e_{q,x}+\Gamma e_{p,x}\}.
+\]
+If all $N_x\geq N_{\min}$ and $O_x\geq O_{\min}$, substitution into $2H\rho$ proves the explicit finite-sample rate in the main paper. The bound is vacuous when a relevant count is zero, as it should be; exact validity still holds because the confidence interval becomes $[0,1]$.
+
+A useful power corollary follows immediately: if some policy has population robust margin larger than the right-hand side of that rate, its empirical lower certificate is positive, so the algorithm deploys a nonbaseline policy.
+
+\subsection{Estimated transitions}
+Let $\widehat P$ satisfy
+\[
+\max_{s,a}\|P_h(\cdot\mid s,a)-\widehat P_h(\cdot\mid s,a)\|_1\leq\eta_h.
+\]
+For a fixed policy and reward in $[0,1]$, the continuation value after time $h$ has span at most $H-h$. The difference in expectations of a bounded function under two distributions is at most one half their $\ell_1$ distance times its span. Backward induction therefore gives
+\[
+\sup_{\pi,r\in[0,1]}|V_P^\pi-V_{\widehat P}^\pi|
+\leq B_P:=\frac12\sum_{h=1}^{H-1}(H-h)\eta_h.
+\]
+Applying this once to the candidate and once to the baseline shows that a certificate computed under $\widehat P$, minus $2B_P$, is valid under $P$. For a transition row with $N$ observations over $S$ next states, the Weissman inequality gives
+\[
+\Prb\{\|\widehat P-P\|_1\geq\epsilon\}
+\leq(2^S-2)e^{-N\epsilon^2/2}.
+\]
+A union bound across rows supplies simultaneous $\eta_h$; unseen rows may conservatively use the maximum possible distance two.
+
+\section{Additional Experimental Details}
+\subsection{Experimental protocol}
+All environments are finite and all policy values are calculated exactly. No online return is used for policy selection. The full command is
+\begin{verbatim}
+python experiments/run_all.py \
+  --random-mdps 200 --replicates 1000 \
+  --post-selection-replicates 3000 \
+  --gamma-mdps 100 --workers 4
+\end{verbatim}
+The plotting script and checked-in CSV files share fixed seeds. The reference run used Python 3.13.5, NumPy 2.3.5, SciPy 1.17.0, pandas 2.2.3, and Matplotlib 3.10.8 on five virtual Intel Xeon Platinum 8370C CPU cores with 5.9 GiB RAM. No GPU was used.
+
+\subsection{Sensitivity and cancellation instances}
+The sensitivity bandit uses $q=(0.5,0.5)$ and observed success probabilities $p=(0.4,0.6)$. Solving equality between the candidate lower endpoint and baseline upper endpoint gives $\Gamma^\star=9/4$ exactly.
+
+The cancellation MDP is a deterministic four-step chain. Candidate and baseline share the first three actions, whose rewards have $p=0.5$ and an observation rate varied from $0.02$ to one. They differ only at the final action, where the baseline and candidate have $(q,p)=(0.8,0.4)$ and $(0.8,0.6)$. At $\Gamma=2$, the direct certificate is $0.1314$ for every shared observation rate. At rate $0.02$, subtracting separate bounds gives $-0.8486$; their difference exactly matches the cancellation identity.
+
+\subsection{Finite-sample bandits}
+The adversarial null uses $q=(0.3,0.3)$, $p=(0.4,0.6)$, and missing-case probabilities at opposite $\Gamma=2$ endpoints. Although observed means favor the candidate by $0.2$, its true value is $0.04$ below the baseline. The alternative uses $q=(0.8,0.8)$, $p=(0.35,0.65)$, and MAR missing rewards, giving true improvement $0.30$. The behavior policy is uniform. Each sample size uses 1,000 independent repetitions.
+
+\subsection{Post-selection boundary null}
+The baseline reward is point known at $b=0.5$. Every candidate has $q=5/12$ and $p=3/5$ at $\Gamma=2$, whose sharp lower endpoint equals $0.5$. Its latent missing reward is set to that lower endpoint, so all strict-improvement declarations are false. Every candidate receives 1,000 independent logged samples. The simultaneous method allocates $\delta/(2K)$ to the lower tails of $q$ and $p$ for $K$ candidates; the pointwise method reuses $\delta/2$ for every candidate and then selects the largest lower bound. Table~\ref{tab:post} reports 3,000 repetitions.
+
+\begin{table}[t]
+\centering
+\small
+\caption{False strict-improvement declarations under policy-library search.}
+\label{tab:post}
+\begin{tabular}{rrrr}
+\toprule
+$K$ & Simultaneous & Pointwise then select & Complete case \\
+\midrule
+1 & .012 & .012 & 1.000 \\
+5 & .009 & .065 & 1.000 \\
+10 & .007 & .117 & 1.000 \\
+25 & .007 & .281 & 1.000 \\
+50 & .004 & .489 & 1.000 \\
+100 & .004 & .743 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Estimated-transition validation}
+We isolate the estimated-transition proposition in a two-step MDP. At the first step, baseline and candidate choose different actions; each leads to a binary next state, and the second-step reward is one only in the good state. Thus policy value equals the first action's good-state probability. A uniform behavior policy logs the two transition rows. The null uses probabilities $(0.55,0.50)$ and the alternative $(0.55,0.75)$. We construct simultaneous Weissman radii for both rows and subtract the resulting contrastive penalty.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Estimated-transition experiment over 1,000 repetitions. ``Adjusted false'' is harmful deployment under the null; ``adjusted power'' is deployment under the alternative.}
+\label{tab:transition-supp}
+\begin{tabular}{rrrr}
+\toprule
+$n$ & Adjusted false & Plug-in false & Adjusted power \\
+\midrule
+100   & .000 & .301 & .004 \\
+300   & .000 & .175 & .186 \\
+1000  & .000 & .052 & .990 \\
+3000  & .000 & .002 & 1.000 \\
+10000 & .000 & .000 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The adjusted certificate makes no harmful deployment at any sample size and approaches full power. The unadjusted plug-in difference falsely deploys in $30.1\%$ of null datasets at $n=100$. This experiment separates transition sampling error from MNAR reward ambiguity and confirms that the analytic penalty is conservative but vanishes with data.
+
+\subsection{Random MDP generation}
+Transition rows are independent symmetric Dirichlet draws with concentration $0.7$. Observed positive-reward probabilities are uniform on $[0.12,0.88]$, observation probabilities on $[0.10,0.55]$, and cellwise recording odds ratios log-uniform on $[1/3,3]$. The baseline places $0.9$ probability on the true optimal action and distributes $0.1$ uniformly. This oracle use only constructs a stringent baseline; evaluated methods receive no latent reward information.
+
+Complete case optimizes $p_x$; zero fill optimizes $q_xp_x$; absolute robust optimizes $\ell_x$; separate safe deploys the absolute-robust policy only if $\underline V^\pi-\overline V^{\pi_b}>0$; direct safe solves the occupancy LP. The main paper reports means, standard errors, unsafe fractions, and deployment fractions over 200 independent MDPs; the released CSV also includes medians and interquartile ranges.
+
+\subsection{Sensitivity misspecification}
+For each true $\Gamma\in\{1,1.5,2,3,5\}$, every cell's recording odds ratio is set to either $\Gamma$ or $1/\Gamma$ with equal probability, making the stated bound active. We evaluate every assumed value on 100 MDPs per pair. The baseline is a $0.1$-soft oracle.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Unsafe-deployment rate. Rows are true $\Gamma$; columns are assumed $\Gamma$. The guarantee applies on and above the diagonal.}
+\label{tab:gamma}
+\begin{tabular}{rrrrrr}
+\toprule
+ & 1 & 1.5 & 2 & 3 & 5 \\
+\midrule
+1   & .00 & .00 & .00 & .00 & .00 \\
+1.5 & .10 & .00 & .00 & .00 & .00 \\
+2   & .27 & .00 & .00 & .00 & .00 \\
+3   & .64 & .25 & .04 & .00 & .00 \\
+5   & .91 & .75 & .40 & .11 & .00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Conservatively increasing the assumed $\Gamma$ reduces certificate size and eventual improvement but preserves safety whenever the true mechanism is covered. Under-specification can confidently recommend a harmful policy, illustrating why the sensitivity parameter must be reported rather than likelihood tuned.
+
+\section{Implementation Verification}
+The unit suite checks: collapse to point identification at $\Gamma=1$; saturation of the odds-ratio endpoints; monotone interval expansion; equality of binary and finite-support LP bounds; exact one-sided interval mapping; the analytic contrastive minimax formula; equality of the cancellation identity; agreement of the occupancy LP with deterministic-policy enumeration; and validity of the LP certificate for sampled compatible reward vectors. The release contains fourteen such tests and a CI smoke run with reduced experiment counts.
+
+\nocite{clopper1934fiducial,weissman2003inequalities}
+\IfFileExists{aaai2027.bst}{\bibliographystyle{aaai2027}}{\bibliographystyle{plainnat}}
+\bibliography{references}
+\end{document}

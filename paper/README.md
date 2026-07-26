@@ -1,10 +1,11 @@
 # Paper build
 
-The current manuscript is a self-contained two-column preprint. Build it with:
+`main.tex` is the seven-content-page manuscript, `supplement.tex` contains complete proofs and additional experiments, and `ReproducibilityChecklist.tex` is compiled separately.
+
+Without `aaai2027.sty`, `bash build.sh` uses a local two-column fallback for development. The GitHub paper workflow downloads the unmodified official AAAI-27 author kit, builds with `AAAI_MODE=review`, and runs `scripts/check_submission.py`.
 
 ```bash
-cd paper
 bash build.sh
 ```
 
-For AAAI submission, replace the document preamble with the official `aaai2027` template while keeping the paper body and bibliography. The draft is intentionally maintained in a locally compilable form until the official style files are added.
+Do not append the reproducibility checklist to `main.pdf`; the conference requests it as a separate upload.

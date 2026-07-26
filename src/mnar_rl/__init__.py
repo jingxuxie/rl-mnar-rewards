@@ -1,31 +1,63 @@
 """Sensitivity-aware offline reinforcement learning with MNAR rewards."""
 
 from .bounds import (
+    AmbiguousBanditMinimax,
+    ContrastIntervalMinimax,
     BinaryConfidenceBounds,
+    ambiguous_bandit_minimax_regret,
+    contrast_interval_minimax_regret,
     binary_missing_success_bounds,
     binary_reward_confidence_bounds,
     binary_reward_mean_bounds,
+    clopper_pearson_interval,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
     finite_reward_mean_bounds,
 )
-from .data import MNARRewardModel, TabularCounts, missing_probability_from_odds_ratio, plug_in_q_p, simulate_counts
-from .mdp import TabularMDP, epsilon_soft, optimal_policy, policy_occupancy, policy_value, random_mdp
+from .data import (
+    MNARRewardModel,
+    TabularCounts,
+    missing_probability_from_odds_ratio,
+    plug_in_q_p,
+    simulate_counts,
+)
+from .mdp import (
+    TabularMDP,
+    epsilon_soft,
+    optimal_policy,
+    policy_occupancy,
+    policy_value,
+    random_mdp,
+    transition_improvement_penalty,
+    weissman_l1_radius,
+)
 from .optimization import (
     RobustImprovementResult,
+    cancellation_gain,
     optimize_robust_improvement,
     robust_absolute_policy,
     separate_value_lower_bound,
+    sharp_improvement_interval,
     sharp_improvement_lower_bound,
 )
 
 __all__ = [
+    "AmbiguousBanditMinimax",
+    "ContrastIntervalMinimax",
     "BinaryConfidenceBounds",
     "MNARRewardModel",
     "RobustImprovementResult",
     "TabularCounts",
     "TabularMDP",
+    "ambiguous_bandit_minimax_regret",
+    "contrast_interval_minimax_regret",
     "binary_missing_success_bounds",
     "binary_reward_confidence_bounds",
     "binary_reward_mean_bounds",
+    "cancellation_gain",
+    "clopper_pearson_interval",
+    "clopper_pearson_lower",
+    "clopper_pearson_upper",
     "epsilon_soft",
     "finite_reward_mean_bounds",
     "missing_probability_from_odds_ratio",
@@ -37,6 +69,9 @@ __all__ = [
     "random_mdp",
     "robust_absolute_policy",
     "separate_value_lower_bound",
+    "sharp_improvement_interval",
     "sharp_improvement_lower_bound",
     "simulate_counts",
+    "transition_improvement_penalty",
+    "weissman_l1_radius",
 ]
